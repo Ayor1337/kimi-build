@@ -49,7 +49,9 @@ $Asset = "kami-$Version-windows-$Architecture.exe"
 $Url = "$ReleasesUrl/download/v$Version/$Asset"
 New-Item -ItemType Directory -Force $DownloadDir, $BinDir | Out-Null
 $Binary = Join-Path $DownloadDir $Asset
-$Temporary = "$Binary.tmp.$PID"
+# Must keep an .exe extension: Windows refuses to execute PE files whose
+# name does not end in an executable extension.
+$Temporary = "$Binary.tmp.$PID.exe"
 
 try {
     Write-Host "Installing Kimi Build $Version (windows-$Architecture)..." -ForegroundColor Cyan
