@@ -49,6 +49,19 @@ jobs:
       - name: Install DotSlash
         run: cargo install dotslash --locked
 
+      - name: Install protoc (Windows)
+        if: startsWith(matrix.os, 'windows')
+        shell: pwsh
+        run: |
+          $protocRoot = Join-Path $env:RUNNER_TEMP 'protoc-29.3'
+          $archive = Join-Path $env:RUNNER_TEMP 'protoc.zip'
+          Invoke-WebRequest `
+            -Uri 'https://github.com/protocolbuffers/protobuf/releases/download/v29.3/protoc-29.3-win64.zip' `
+            -OutFile $archive
+          Expand-Archive -Path $archive -DestinationPath $protocRoot -Force
+          "PROTOC=$(Join-Path $protocRoot 'bin\protoc.exe')" >> $env:GITHUB_ENV
+          (Join-Path $protocRoot 'bin') >> $env:GITHUB_PATH
+
       - name: Build release binary
         shell: bash
         run: |
