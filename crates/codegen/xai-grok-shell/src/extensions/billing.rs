@@ -1,6 +1,6 @@
 //! `x.ai/billing` extension handler.
 //!
-//! Fetches the authenticated user's Kimi Code quota (weekly limit, per-window
+//! Fetches the authenticated user's Kimi Build quota (weekly limit, per-window
 //! limits such as the 5h cap, and the booster wallet) from
 //! `GET {proxy}/usages` and maps it onto the billing shape the pager renders.
 //! Used by the pager/desktop to display credits and usage.
@@ -225,7 +225,7 @@ async fn handle_get_billing(agent: &MvpAgent) -> ExtResult {
     let proxy_base = agent.cli_chat_proxy_base_url();
     let base = proxy_base.trim_end_matches('/');
 
-    // Kimi Code quota: `GET /usages` (weekly limit, per-window limits,
+    // Kimi Build quota: `GET /usages` (weekly limit, per-window limits,
     // booster wallet). Mirrors the official kimi CLI's managed-usage fetch:
     // only `Authorization` + `Accept` headers.
     let usages_url = format!("{}/usages", base);

@@ -1752,7 +1752,7 @@ impl MvpAgent {
     ///
     /// Non-first-party auth (API keys, enterprise) always passes. First-party
     /// Kimi logins also always pass: the OAuth device flow is only issued to
-    /// Kimi Code subscribers and the inference endpoint enforces access
+    /// Kimi Build subscribers and the inference endpoint enforces access
     /// server-side — grok's `allow_access` remote-settings gate has no
     /// counterpart on api.kimi.com (it 404s), so consulting it would
     /// permanently block every Kimi user.
