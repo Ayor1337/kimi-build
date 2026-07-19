@@ -25,7 +25,14 @@ if (-not $Version -and $env:KAMI_VERSION) {
 }
 if (-not $Version) {
     Write-Host 'Fetching latest Kimi Build version...' -ForegroundColor DarkGray
-    $Version = (Invoke-WebRequest -UseBasicParsing "$ReleasesUrl/latest/download/version.txt").Content.Trim()
+    $Response = Invoke-WebRequest -UseBasicParsing "$ReleasesUrl/latest/download/version.txt"
+    # GitHub serves release assets as application/octet-stream, so Windows
+    # PowerShell 5.1 returns Content as Byte[] instead of a string.
+    $Version = if ($Response.Content -is [byte[]]) {
+        [Text.Encoding]::UTF8.GetString($Response.Content).Trim()
+    } else {
+        $Response.Content.Trim()
+    }
 }
 if ($Version -notmatch '^\d+\.\d+\.\d+(-[A-Za-z0-9._]+)?$') {
     throw "Invalid version '$Version' (expected X.Y.Z or X.Y.Z-suffix)."
