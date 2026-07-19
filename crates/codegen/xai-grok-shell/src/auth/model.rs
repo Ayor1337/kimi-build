@@ -132,9 +132,9 @@ impl GrokAuth {
             .num_seconds()
     }
 
-    /// `true` when the token comes from a first-party xAI account —
-    /// either an OIDC login against https://auth.x.ai (or the local-dev
-    /// equivalent), or an external auth provider that declared an xAI
+    /// `true` when the token comes from a first-party Kimi account —
+    /// either an OIDC login against https://auth.kimi.com (or the local-dev
+    /// equivalent), or an external auth provider that declared a Kimi
     /// issuer for its token.
     ///
     /// The issuer is a client-side hint, not a trust assertion: everything

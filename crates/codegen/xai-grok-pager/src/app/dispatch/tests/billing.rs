@@ -191,7 +191,7 @@ fn upsell_non_max_qa_heading_is_spending_cap_when_payg_on() {
 }
 
 #[test]
-fn upsell_non_max_upgrade_url_is_supergrok() {
+fn upsell_non_max_upgrade_url_is_kimi_console() {
     let mut app = test_app_with_agent();
     open_upsell_qa(
         &mut app,
@@ -201,12 +201,11 @@ fn upsell_non_max_upgrade_url_is_supergrok() {
         .id
         .as_deref()
         .unwrap();
-    assert!(url.contains("supergrok"), "got: {url}");
-    assert!(url.contains("referrer=grok-build"), "got: {url}");
+    assert_eq!(url, "https://www.kimi.com/code/console", "got: {url}");
 }
 
 #[test]
-fn upsell_non_max_payg_url_is_usage() {
+fn upsell_non_max_payg_url_is_kimi_console() {
     let mut app = test_app_with_agent();
     open_upsell_qa(
         &mut app,
@@ -216,7 +215,7 @@ fn upsell_non_max_payg_url_is_usage() {
         .id
         .as_deref()
         .unwrap();
-    assert!(url.contains("_s=usage"), "got: {url}");
+    assert_eq!(url, "https://www.kimi.com/code/console", "got: {url}");
 }
 
 #[test]

@@ -1,8 +1,9 @@
 //! `x.ai/billing` extension handler.
 //!
-//! Fetches the authenticated user's Grok Build billing configuration
-//! (credit limit, usage, on-demand cap, billing period, history) from
-//! the backend. Used by the pager/desktop to display credits and usage.
+//! Fetches the authenticated user's Kimi Code quota (weekly limit, per-window
+//! limits such as the 5h cap, and the booster wallet) from
+//! `GET {proxy}/usages` and maps it onto the billing shape the pager renders.
+//! Used by the pager/desktop to display credits and usage.
 
 use agent_client_protocol as acp;
 use serde::{Deserialize, Serialize};
@@ -57,6 +58,19 @@ pub struct BillingPeriodUsage {
     pub total_used: Option<Cent>,
 }
 
+/// One extra quota window from the Kimi `/usages` payload (e.g. the 5h limit),
+/// rendered as its own line in the `/usage` summary.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuotaRow {
+    pub label: String,
+    pub used: i64,
+    pub limit: i64,
+    /// Ready-to-display reset hint (e.g. "resets in 2d 3h"), if known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reset_hint: Option<String>,
+}
+
 /// Current billing configuration for Grok Build coding credits.
 ///
 /// Carries both the newer credits-config fields (`credit_usage_percent`,
@@ -104,6 +118,10 @@ pub struct BillingConfig {
     /// Deprecated: use `current_period.end`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub billing_period_end: Option<String>,
+    /// Extra quota windows from the Kimi `/usages` payload (e.g. the 5h
+    /// limit). Empty for providers without per-window quotas.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub quota_rows: Vec<QuotaRow>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub history: Vec<BillingPeriodUsage>,
 }
@@ -201,28 +219,20 @@ async fn handle_get_billing(agent: &MvpAgent) -> ExtResult {
     let auth = super::auth_gate::require_xai_auth(
         &agent.auth_manager,
         "Authentication required to fetch billing data",
-        "Billing data requires auth with grok.com. Run `grok login` to authenticate.",
+        "Billing data requires auth with Kimi. Run `grok login` to authenticate.",
     )?;
 
     let proxy_base = agent.cli_chat_proxy_base_url();
     let base = proxy_base.trim_end_matches('/');
 
-    // Credits balance / usage (new billing system) via the CLI proxy, which
-    // forwards to the backend `GetGrokCreditsConfig`.
-    let credits_url = format!("{}/billing?format=credits", base);
-    let credits_resp = crate::http::shared_client()
-        .get(&credits_url)
+    // Kimi Code quota: `GET /usages` (weekly limit, per-window limits,
+    // booster wallet). Mirrors the official kimi CLI's managed-usage fetch:
+    // only `Authorization` + `Accept` headers.
+    let usages_url = format!("{}/usages", base);
+    let resp = crate::http::shared_client()
+        .get(&usages_url)
         .header("Authorization", format!("Bearer {}", &auth.key))
-        .header(
-            "X-XAI-Token-Auth",
-            crate::auth::GrokComConfig::default().token_header,
-        )
-        .header("x-userid", &auth.user_id)
-        .header("x-grok-client-version", xai_grok_version::VERSION)
-        .header(
-            crate::http::CLIENT_MODE_HEADER,
-            crate::http::process_client_mode(),
-        )
+        .header("Accept", "application/json")
         .timeout(std::time::Duration::from_secs(15))
         .send()
         .await
@@ -236,10 +246,10 @@ async fn handle_get_billing(agent: &MvpAgent) -> ExtResult {
             acp::Error::internal_error().data(format!("Failed to fetch billing data: {e}"))
         })?;
 
-    if !credits_resp.status().is_success() {
-        let status = credits_resp.status().as_u16();
-        let body = credits_resp.text().await.unwrap_or_default();
-        tracing::warn!(status, url = %credits_url, "billing: upstream error");
+    if !resp.status().is_success() {
+        let status = resp.status().as_u16();
+        let body = resp.text().await.unwrap_or_default();
+        tracing::warn!(status, url = %usages_url, "billing: upstream error");
 
         let detail = serde_json::from_str::<serde_json::Value>(&body)
             .ok()
@@ -258,7 +268,7 @@ async fn handle_get_billing(agent: &MvpAgent) -> ExtResult {
         return Err(acp::Error::internal_error().data(format!("Billing service error: {detail}")));
     }
 
-    let mut billing: BillingConfigResponse = credits_resp.json().await.map_err(|e| {
+    let payload: serde_json::Value = resp.json().await.map_err(|e| {
         tracing::error!(error = %e, "billing: failed to parse response");
         xai_grok_telemetry::unified_log::warn(
             "billing: failed to parse response",
@@ -268,17 +278,10 @@ async fn handle_get_billing(agent: &MvpAgent) -> ExtResult {
         acp::Error::internal_error().data(format!("Failed to parse billing data: {e}"))
     })?;
 
-    // Enrich with fields from remote settings.
-    let rs = agent.cfg.borrow().remote_settings.clone();
-    billing.on_demand_enabled = rs.as_ref().and_then(|rs| rs.on_demand_enabled);
-    billing.subscription_tier = rs.as_ref().and_then(|rs| {
-        rs.subscription_tier_display
-            .clone()
-            .or_else(|| rs.subscription_tier.clone())
-    });
+    let billing = billing_from_kimi_usages(&payload);
 
     // Every prompt / /usage / poll path hits `x.ai/billing`; log the fetched
-    // credits snapshot so support can correlate limit UX with real balances.
+    // quota snapshot so support can correlate limit UX with real balances.
     xai_grok_telemetry::unified_log::info(
         "billing: fetched credits config",
         None,
@@ -288,61 +291,304 @@ async fn handle_get_billing(agent: &MvpAgent) -> ExtResult {
     to_raw_response(&billing)
 }
 
-async fn handle_get_auto_topup_rule(agent: &MvpAgent) -> ExtResult {
-    let auth = super::auth_gate::require_xai_auth(
-        &agent.auth_manager,
-        "Authentication required to fetch auto top-up rule",
-        "Auto top-up data requires auth with grok.com. Run `grok login` to authenticate.",
-    )?;
+// ── Kimi `/usages` payload mapping ──────────────────────────────────────
 
-    let proxy_base = agent.cli_chat_proxy_base_url();
-    let base = proxy_base.trim_end_matches('/');
+/// Kimi booster-wallet amounts are fixed-point with 6 fractional digits.
+const FIXED_POINT_CENTS: f64 = 1e6;
 
-    // Auto top-up rule via the CLI proxy, which forwards to the backend
-    // `GetAutoTopupRule`.
-    let url = format!("{}/auto-topup-rule", base);
-    let response = crate::http::shared_client()
-        .get(&url)
-        .header("Authorization", format!("Bearer {}", &auth.key))
-        .header(
-            "X-XAI-Token-Auth",
-            crate::auth::GrokComConfig::default().token_header,
-        )
-        .header("x-userid", &auth.user_id)
-        .header("x-grok-client-version", xai_grok_version::VERSION)
-        .header(
-            crate::http::CLIENT_MODE_HEADER,
-            crate::http::process_client_mode(),
-        )
-        .timeout(std::time::Duration::from_secs(10))
-        .send()
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "auto-topup: upstream request failed");
-            acp::Error::internal_error().data(format!("Failed to fetch auto top-up rule: {e}"))
-        })?;
+/// Truncating number-or-numeric-string coercion (mirrors the official CLI's
+/// `toInt`).
+fn to_i64(value: &serde_json::Value) -> Option<i64> {
+    match value {
+        serde_json::Value::Number(n) => n.as_f64().filter(|f| f.is_finite()).map(|f| f as i64),
+        serde_json::Value::String(s) => s.trim().parse::<f64>().ok().map(|f| f as i64),
+        _ => None,
+    }
+}
 
-    if !response.status().is_success() {
-        let status = response.status().as_u16();
-        let body = response.text().await.unwrap_or_default();
-        tracing::warn!(status, url = %url, "auto-topup: upstream error");
+fn obj_get<'v>(v: &'v serde_json::Value, key: &str) -> Option<&'v serde_json::Value> {
+    v.as_object().and_then(|o| o.get(key))
+}
 
-        let detail = serde_json::from_str::<serde_json::Value>(&body)
-            .ok()
-            .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(String::from))
-            .unwrap_or_else(|| format!("HTTP {status}"));
+fn first_present<'v>(
+    v: &'v serde_json::Value,
+    keys: &[&str],
+) -> Option<&'v serde_json::Value> {
+    keys.iter().find_map(|k| obj_get(v, k))
+}
 
-        return Err(
-            acp::Error::internal_error().data(format!("Auto top-up service error: {detail}"))
+/// Format seconds as the official CLI does: `2d 3h 5m` (seconds only when no
+/// larger unit is present).
+fn format_duration(total_seconds: i64) -> String {
+    if total_seconds <= 0 {
+        return "0s".to_string();
+    }
+    let days = total_seconds / 86400;
+    let hours = total_seconds % 86400 / 3600;
+    let minutes = total_seconds % 3600 / 60;
+    let secs = total_seconds % 60;
+    let mut parts = Vec::new();
+    if days > 0 {
+        parts.push(format!("{days}d"));
+    }
+    if hours > 0 {
+        parts.push(format!("{hours}h"));
+    }
+    if minutes > 0 {
+        parts.push(format!("{minutes}m"));
+    }
+    if parts.is_empty() && secs > 0 {
+        parts.push(format!("{secs}s"));
+    }
+    parts.join(" ")
+}
+
+/// Reset hint + machine-usable reset timestamp for one usage row.
+///
+/// Accepts `reset_at`-style RFC 3339 strings and `reset_in`-style second
+/// counts. Returns `(display_hint, reset_at_rfc3339)`.
+fn reset_hint_from(raw: &serde_json::Value) -> (Option<String>, Option<String>) {
+    const AT_KEYS: &[&str] = &["reset_at", "resetAt", "reset_time", "resetTime"];
+    if let Some(v) = first_present(raw, AT_KEYS).and_then(|v| v.as_str())
+        && !v.is_empty()
+    {
+        let hint = match chrono::DateTime::parse_from_rfc3339(v) {
+            Ok(dt) => {
+                let secs = (dt.with_timezone(&chrono::Utc) - chrono::Utc::now()).num_seconds();
+                if secs <= 0 {
+                    "reset".to_string()
+                } else {
+                    format!("resets in {}", format_duration(secs))
+                }
+            }
+            Err(_) => format!("resets at {v}"),
+        };
+        return (Some(hint), Some(v.to_string()));
+    }
+    const IN_KEYS: &[&str] = &["reset_in", "resetIn", "ttl", "window"];
+    if let Some(secs) = first_present(raw, IN_KEYS).and_then(to_i64)
+        && secs > 0
+    {
+        let end = (chrono::Utc::now() + chrono::Duration::seconds(secs)).to_rfc3339();
+        return (
+            Some(format!("resets in {}", format_duration(secs))),
+            Some(end),
         );
     }
+    (None, None)
+}
 
-    // Return the upstream response body verbatim (as a JSON value) so /usage
-    // can print the exact data from this request unformatted.
-    let body_text = response.text().await.unwrap_or_default();
-    let value: serde_json::Value =
-        serde_json::from_str(&body_text).unwrap_or(serde_json::json!({"raw": body_text}));
-    to_raw_response(&value)
+/// One usage row (`usage` summary or a `limits[].detail`): label, used,
+/// limit, and reset info. `None` when both used and limit are absent.
+struct ParsedUsageRow {
+    label: String,
+    used: i64,
+    limit: i64,
+    reset_hint: Option<String>,
+    reset_at: Option<String>,
+}
+
+fn parse_usage_row(raw: &serde_json::Value, default_label: &str) -> Option<ParsedUsageRow> {
+    if !raw.is_object() {
+        return None;
+    }
+    let limit = obj_get(raw, "limit").and_then(to_i64);
+    let mut used = obj_get(raw, "used").and_then(to_i64);
+    if used.is_none()
+        && let (Some(remaining), Some(limit)) =
+            (obj_get(raw, "remaining").and_then(to_i64), limit)
+    {
+        used = Some(limit - remaining);
+    }
+    if used.is_none() && limit.is_none() {
+        return None;
+    }
+    let label = first_present(raw, &["name", "title"])
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or(default_label)
+        .to_string();
+    let (reset_hint, reset_at) = reset_hint_from(raw);
+    Some(ParsedUsageRow {
+        label,
+        used: used.unwrap_or(0),
+        limit: limit.unwrap_or(0),
+        reset_hint,
+        reset_at,
+    })
+}
+
+/// Label for a `limits[]` entry: explicit name/title/scope, else derived from
+/// the window (`5h limit`, `30m limit`, `7d limit`).
+fn limit_label(
+    item: &serde_json::Value,
+    detail: &serde_json::Value,
+    window: &serde_json::Value,
+    idx: usize,
+) -> String {
+    for key in ["name", "title", "scope"] {
+        if let Some(v) = obj_get(item, key)
+            .or_else(|| obj_get(detail, key))
+            .and_then(|v| v.as_str())
+            && !v.is_empty()
+        {
+            return v.to_string();
+        }
+    }
+    let duration = obj_get(window, "duration")
+        .or_else(|| obj_get(item, "duration"))
+        .or_else(|| obj_get(detail, "duration"))
+        .and_then(to_i64);
+    let time_unit = obj_get(window, "timeUnit")
+        .or_else(|| obj_get(item, "timeUnit"))
+        .or_else(|| obj_get(detail, "timeUnit"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if let Some(duration) = duration {
+        if time_unit.contains("MINUTE") {
+            if duration >= 60 && duration % 60 == 0 {
+                return format!("{}h limit", duration / 60);
+            }
+            return format!("{duration}m limit");
+        }
+        if time_unit.contains("HOUR") {
+            return format!("{duration}h limit");
+        }
+        if time_unit.contains("DAY") {
+            return format!("{duration}d limit");
+        }
+        return format!("{duration}s limit");
+    }
+    format!("Limit #{}", idx + 1)
+}
+
+/// Fixed-point (1e6) → cents, rounding up sub-cent remainders to 1.
+fn fixed_point_to_cents(value: i64) -> i64 {
+    let cents = value as f64 / FIXED_POINT_CENTS;
+    if cents > 0.0 && cents < 1.0 {
+        1
+    } else {
+        cents.round() as i64
+    }
+}
+
+/// `monthlyChargeLimit` / `monthlyUsed`: `{priceInCents, currency}` → cents.
+fn parse_money_cents(raw: Option<&serde_json::Value>) -> Option<i64> {
+    obj_get(raw?, "priceInCents").and_then(to_i64)
+}
+
+/// Booster wallet → `(prepaid_balance_cents, charge_limit_cents, charge_used_cents,
+/// charge_limit_enabled)`.
+fn parse_booster_wallet(raw: &serde_json::Value) -> Option<(i64, i64, i64, bool)> {
+    let balance = obj_get(raw, "balance")?;
+    if obj_get(balance, "type").and_then(|v| v.as_str()) != Some("BOOSTER") {
+        return None;
+    }
+    let amount = obj_get(balance, "amount").and_then(to_i64)?;
+    if amount <= 0 {
+        return None;
+    }
+    let amount_left = obj_get(balance, "amountLeft")
+        .and_then(to_i64)
+        .map(fixed_point_to_cents)
+        .unwrap_or(0);
+    let limit = parse_money_cents(obj_get(raw, "monthlyChargeLimit")).unwrap_or(0);
+    let used = parse_money_cents(obj_get(raw, "monthlyUsed")).unwrap_or(0);
+    let enabled = obj_get(raw, "monthlyChargeLimitEnabled")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    Some((amount_left, limit, used, enabled))
+}
+
+/// Map the Kimi `/usages` payload onto the billing shape the pager renders.
+///
+/// - summary `usage` → weekly usage percent + next reset
+/// - `limits[]` → extra quota rows (5h limit etc.)
+/// - `boosterWallet` → prepaid credits + pay-as-you-go (monthly charge limit)
+fn billing_from_kimi_usages(payload: &serde_json::Value) -> BillingConfigResponse {
+    let summary = obj_get(payload, "usage").and_then(|u| parse_usage_row(u, "Weekly limit"));
+
+    let mut quota_rows = Vec::new();
+    if let Some(serde_json::Value::Array(items)) = obj_get(payload, "limits") {
+        for (idx, item) in items.iter().enumerate() {
+            let detail = obj_get(item, "detail").unwrap_or(item);
+            let window = obj_get(item, "window").cloned().unwrap_or(serde_json::json!({}));
+            let label = limit_label(item, detail, &window, idx);
+            if let Some(row) = parse_usage_row(detail, &label) {
+                quota_rows.push(QuotaRow {
+                    label: row.label,
+                    used: row.used,
+                    limit: row.limit,
+                    reset_hint: row.reset_hint,
+                });
+            }
+        }
+    }
+
+    let (prepaid, charge_limit, charge_used, charge_enabled) = obj_get(payload, "boosterWallet")
+        .and_then(parse_booster_wallet)
+        .unwrap_or((0, 0, 0, false));
+
+    let (usage_pct, current_period, monthly_limit, used) = match &summary {
+        Some(row) => {
+            let pct = if row.limit > 0 {
+                Some(row.used as f64 / row.limit as f64 * 100.0)
+            } else {
+                None
+            };
+            let period_type = if row.label.to_lowercase().contains("month") {
+                "USAGE_PERIOD_TYPE_MONTHLY"
+            } else {
+                "USAGE_PERIOD_TYPE_WEEKLY"
+            };
+            let period = UsagePeriod {
+                period_type: Some(period_type.to_string()),
+                start: None,
+                end: row.reset_at.clone(),
+            };
+            (
+                pct,
+                Some(period),
+                (row.limit > 0).then_some(Cent { val: row.limit }),
+                Some(Cent { val: row.used }),
+            )
+        }
+        None => (None, None, None, None),
+    };
+
+    BillingConfigResponse {
+        config: Some(BillingConfig {
+            credit_usage_percent: usage_pct,
+            current_period,
+            monthly_limit,
+            used,
+            on_demand_cap: (charge_enabled && charge_limit > 0).then_some(Cent {
+                val: charge_limit,
+            }),
+            on_demand_used: (charge_enabled && charge_limit > 0)
+                .then_some(Cent { val: charge_used }),
+            prepaid_balance: (prepaid > 0).then_some(Cent { val: prepaid }),
+            is_unified_billing_user: None,
+            billing_period_start: None,
+            billing_period_end: None,
+            quota_rows,
+            history: vec![],
+        }),
+        on_demand_enabled: Some(charge_enabled),
+        subscription_tier: None,
+    }
+}
+
+async fn handle_get_auto_topup_rule(agent: &MvpAgent) -> ExtResult {
+    let _ = super::auth_gate::require_xai_auth(
+        &agent.auth_manager,
+        "Authentication required to fetch auto top-up rule",
+        "Auto top-up data requires auth with Kimi. Run `grok login` to authenticate.",
+    )?;
+
+    // Kimi has no auto top-up concept; report a definitive "no rule" instead
+    // of hitting a non-existent endpoint on every poll.
+    to_raw_response(&GetAutoTopupRuleResponse { rule: None })
 }
 
 #[cfg(test)]
@@ -420,6 +666,7 @@ mod tests {
                 is_unified_billing_user: Some(true),
                 billing_period_start: None,
                 billing_period_end: None,
+                quota_rows: vec![],
                 history: vec![
                     BillingPeriodUsage {
                         billing_cycle: Some(BillingCycle {
@@ -474,6 +721,7 @@ mod tests {
             is_unified_billing_user: None,
             billing_period_start: Some("2025-04-01T00:00:00Z".to_string()),
             billing_period_end: Some("2025-05-01T00:00:00Z".to_string()),
+            quota_rows: vec![],
             history: vec![BillingPeriodUsage {
                 billing_cycle: Some(BillingCycle {
                     year: 2025,
@@ -532,6 +780,7 @@ mod tests {
             is_unified_billing_user: None,
             billing_period_start: None,
             billing_period_end: None,
+            quota_rows: vec![],
             history: vec![],
         };
         let json = serde_json::to_value(&config).unwrap();
@@ -606,5 +855,105 @@ mod tests {
         let c = Cent { val: 4299 };
         let json = serde_json::to_value(&c).unwrap();
         assert_eq!(json, serde_json::json!({"val": 4299}));
+    }
+
+    // ── Kimi `/usages` mapping ────────────────────────────────────────
+
+    #[test]
+    fn kimi_usages_full_payload_maps_all_sections() {
+        let reset_at = (chrono::Utc::now() + chrono::Duration::days(2)).to_rfc3339();
+        let payload = serde_json::json!({
+            "usage": { "limit": 1000, "used": 250, "reset_at": reset_at },
+            "limits": [
+                {
+                    "window": { "duration": 5, "timeUnit": "USAGE_TIME_UNIT_HOUR" },
+                    "detail": { "limit": 100, "remaining": 60, "reset_in": 3600 }
+                },
+                {
+                    "scope": "Weekly bonus",
+                    "detail": { "limit": "500", "used": "50" }
+                }
+            ],
+            "boosterWallet": {
+                "balance": { "type": "BOOSTER", "amount": 20_000_000_000i64, "amountLeft": 12_340_000_000i64 },
+                "monthlyChargeLimit": { "priceInCents": 5000, "currency": "USD" },
+                "monthlyUsed": { "priceInCents": 1234, "currency": "USD" },
+                "monthlyChargeLimitEnabled": true
+            }
+        });
+        let resp = billing_from_kimi_usages(&payload);
+        let config = resp.config.unwrap();
+
+        // Weekly summary.
+        assert_eq!(config.credit_usage_percent, Some(25.0));
+        let period = config.current_period.unwrap();
+        assert_eq!(period.period_type.as_deref(), Some("USAGE_PERIOD_TYPE_WEEKLY"));
+        assert_eq!(period.end.as_deref(), Some(reset_at.as_str()));
+        assert_eq!(config.monthly_limit.unwrap().val, 1000);
+        assert_eq!(config.used.unwrap().val, 250);
+
+        // Per-window rows: window-derived label + remaining→used fallback.
+        assert_eq!(config.quota_rows.len(), 2);
+        let five_h = &config.quota_rows[0];
+        assert_eq!(five_h.label, "5h limit");
+        assert_eq!(five_h.used, 40);
+        assert_eq!(five_h.limit, 100);
+        assert_eq!(five_h.reset_hint.as_deref(), Some("resets in 1h"));
+        // scope label + string-coerced numbers.
+        let bonus = &config.quota_rows[1];
+        assert_eq!(bonus.label, "Weekly bonus");
+        assert_eq!(bonus.used, 50);
+        assert_eq!(bonus.limit, 500);
+
+        // Booster wallet → prepaid credits + pay-as-you-go charge limit.
+        assert_eq!(config.prepaid_balance.unwrap().val, 12340);
+        assert_eq!(config.on_demand_cap.unwrap().val, 5000);
+        assert_eq!(config.on_demand_used.unwrap().val, 1234);
+        assert_eq!(resp.on_demand_enabled, Some(true));
+    }
+
+    #[test]
+    fn kimi_usages_minimal_payload_tolerates_missing_sections() {
+        let resp = billing_from_kimi_usages(&serde_json::json!({}));
+        let config = resp.config.unwrap();
+        assert!(config.credit_usage_percent.is_none());
+        assert!(config.current_period.is_none());
+        assert!(config.quota_rows.is_empty());
+        assert!(config.prepaid_balance.is_none());
+        assert!(config.on_demand_cap.is_none());
+    }
+
+    #[test]
+    fn kimi_usages_zero_balance_wallet_yields_no_prepaid() {
+        let payload = serde_json::json!({
+            "boosterWallet": {
+                "balance": { "type": "BOOSTER", "amount": 0, "amountLeft": 0 }
+            }
+        });
+        let resp = billing_from_kimi_usages(&payload);
+        assert!(resp.config.unwrap().prepaid_balance.is_none());
+    }
+
+    #[test]
+    fn kimi_limit_label_minute_windows() {
+        let detail = serde_json::json!({});
+        // 300 minutes → "5h limit"; 45 minutes → "45m limit".
+        let item = serde_json::json!({ "window": { "duration": 300, "timeUnit": "MINUTE" } });
+        assert_eq!(limit_label(&item, &detail, &item["window"], 0), "5h limit");
+        let item = serde_json::json!({ "window": { "duration": 45, "timeUnit": "MINUTE" } });
+        assert_eq!(limit_label(&item, &detail, &item["window"], 0), "45m limit");
+        // Day windows and the numbered fallback.
+        let item = serde_json::json!({ "window": { "duration": 7, "timeUnit": "DAY" } });
+        assert_eq!(limit_label(&item, &detail, &item["window"], 0), "7d limit");
+        assert_eq!(limit_label(&detail, &detail, &detail, 1), "Limit #2");
+    }
+
+    #[test]
+    fn kimi_reset_hint_past_time_reports_reset() {
+        let past = (chrono::Utc::now() - chrono::Duration::hours(1)).to_rfc3339();
+        let raw = serde_json::json!({ "reset_at": past });
+        let (hint, at) = reset_hint_from(&raw);
+        assert_eq!(hint.as_deref(), Some("reset"));
+        assert_eq!(at.as_deref(), Some(past.as_str()));
     }
 }

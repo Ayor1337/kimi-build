@@ -1750,22 +1750,15 @@ impl MvpAgent {
     }
     /// Check whether the user has access via remote settings `allow_access`.
     ///
-    /// Non-xAI auth (API keys, enterprise) always passes. For xAI OAuth2
-    /// users, reads `allow_access` from remote settings. Defaults to
-    /// `false` (blocked) when remote settings are unavailable.
+    /// Non-first-party auth (API keys, enterprise) always passes. First-party
+    /// Kimi logins also always pass: the OAuth device flow is only issued to
+    /// Kimi Code subscribers and the inference endpoint enforces access
+    /// server-side — grok's `allow_access` remote-settings gate has no
+    /// counterpart on api.kimi.com (it 404s), so consulting it would
+    /// permanently block every Kimi user.
     pub(super) async fn enforce_grok_code_access(&self, auth: &crate::auth::GrokAuth) {
-        if !auth.is_xai_auth() {
-            self.tier_allowed.set(true);
-            return;
-        }
-        let allow = settings_allow_access(self.cfg.borrow().remote_settings.as_ref());
-        self.tier_allowed.set(allow);
-        if !allow {
-            tracing::info!(
-                "auth: user blocked by allow_access (remote settings grok_build_access_gate)"
-            );
-            self.retry_subscription_check().await;
-        }
+        let _ = auth;
+        self.tier_allowed.set(true);
     }
     /// Single-shot subscription check called by the pager's "Check
     /// subscription" button (`x.ai/auth/check_subscription`). The pager
@@ -2616,9 +2609,10 @@ fn spawn_post_unblock_jwt_and_catalog_retry(
 /// Defaults to `false` (blocked) when settings are `None` or the field is
 /// absent — matching the `grok_build_access_gate` flag's server-side default.
 ///
-/// Used by both `enforce_grok_code_access` (initial login gate) and
-/// `retry_subscription_check` (poller gate lift) to keep the decision in
-/// one place.
+/// Used by `retry_subscription_check` (poller gate lift). The initial login
+/// gate (`enforce_grok_code_access`) no longer consults it: first-party Kimi
+/// logins are allowed unconditionally because api.kimi.com has no
+/// `allow_access` settings endpoint.
 pub(crate) fn settings_allow_access(
     rs: Option<&crate::util::config::RemoteSettings>,
 ) -> bool {

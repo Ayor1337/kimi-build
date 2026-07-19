@@ -43,9 +43,9 @@ pub fn default_agent_type() -> String {
     DEFAULT_AGENT_TYPE.to_owned()
 }
 /// Default base URL for the cli chat proxy.
-pub const CLI_CHAT_PROXY_BASE_URL_DEFAULT: &str = "https://cli-chat-proxy.grok.com/v1";
-/// Default base URL for the public xAI API.
-pub const XAI_API_BASE_URL_DEFAULT: &str = "https://api.x.ai/v1";
+pub const CLI_CHAT_PROXY_BASE_URL_DEFAULT: &str = "https://api.kimi.com/coding/v1";
+/// Default base URL for the public Kimi API (BYOK / API-key auth).
+pub const XAI_API_BASE_URL_DEFAULT: &str = "https://api.moonshot.ai/v1";
 /// Default base URL for the asset server (profile images, etc.).
 pub const ASSET_SERVER_URL_DEFAULT: &str = "https://assets.grok.com";
 /// One or more environment variable names that may hold a model API key.
@@ -2625,10 +2625,10 @@ impl Config {
             .default(true)
             .resolve()
     }
-    /// Resolve whether to use grok's default OAuth2 (xAI auth.x.ai).
+    /// Resolve whether to use grok's default OAuth2 (Kimi auth.kimi.com).
     ///
     /// Enterprise OIDC (`oidc` in config.toml) always wins — this only gates
-    /// the default xAI OAuth2 fallback when no enterprise OIDC is configured.
+    /// the default Kimi OAuth2 fallback when no enterprise OIDC is configured.
     ///
     /// Priority: `--oauth` > GROK_OAUTH_ENABLED env > default (true = OAuth).
     pub fn resolve_grok_oauth(&self, cli_oidc: Option<bool>) -> Resolved<bool> {

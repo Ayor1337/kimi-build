@@ -91,6 +91,8 @@ fn config_login_device_flow(effective: Option<&toml::Value>) -> Option<bool> {
 
 /// Device-flow precedence: CLI > env > config > remote feature flag > loopback.
 /// Returns the deciding tier so the caller can log which one chose the transport.
+/// The default is the device flow: the first-party provider (Kimi) has no
+/// authorize endpoint / OIDC discovery, so loopback cannot complete against it.
 fn resolve_device_flow(
     login_override: LoginTransportOverride,
     config: Option<bool>,
@@ -100,7 +102,7 @@ fn resolve_device_flow(
         .cli(login_override.as_cli_bool())
         .config(config)
         .feature_flag(remote)
-        .default(false)
+        .default(true)
         .resolve()
 }
 
@@ -1476,13 +1478,14 @@ mod tests {
 
     #[test]
     fn device_flow_precedence_config_then_default() {
-        // No CLI flag, no env: config decides; absent everything → loopback.
+        // No CLI flag, no env: config decides; absent everything → device flow
+        // (the first-party Kimi provider has no loopback authorize endpoint).
         with_device_flow_env(None, || {
             assert!(!resolve_device_flow(LoginTransportOverride::None, Some(false), None).value);
             assert!(resolve_device_flow(LoginTransportOverride::None, Some(true), None).value);
             assert!(
-                !resolve_device_flow(LoginTransportOverride::None, None, None).value,
-                "default is loopback"
+                resolve_device_flow(LoginTransportOverride::None, None, None).value,
+                "default is device flow"
             );
         });
     }
@@ -1499,10 +1502,10 @@ mod tests {
                 !resolve_device_flow(LoginTransportOverride::None, None, Some(false)).value,
                 "remote=loopback keeps loopback when nothing local is set"
             );
-            // remote settings unavailable / flag unset → None → hardcoded loopback default.
+            // remote settings unavailable / flag unset → None → hardcoded device default.
             assert!(
-                !resolve_device_flow(LoginTransportOverride::None, None, None).value,
-                "remote settings unavailable falls back to the loopback default"
+                resolve_device_flow(LoginTransportOverride::None, None, None).value,
+                "remote settings unavailable falls back to the device-flow default"
             );
         });
     }
@@ -1849,7 +1852,7 @@ mod tests {
         // Device flow fall-through hits the device-code endpoint (not OIDC
         // discovery).
         assert!(
-            err.to_string().contains("/oauth2/device/code"),
+            err.to_string().contains("/api/oauth/device_authorization"),
             "expected device-code request error (proves flow fell through to interactive login), got: {err}"
         );
     }

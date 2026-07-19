@@ -84,7 +84,7 @@ pub fn seed_fake_oauth(content: &ContentController, user: &str) {
         grok_home.join("auth.json"),
         format!(
             r#"{{
-  "https://auth.x.ai::b1a00492-073a-47ea-816f-4c329264a828": {{
+  "https://auth.kimi.com::17e5f671-d194-4dfb-9706-5516cb48c098": {{
     "key": "pty-test-oauth-token",
     "auth_mode": "oidc",
     "create_time": "2026-01-01T00:00:00Z",
@@ -92,8 +92,8 @@ pub fn seed_fake_oauth(content: &ContentController, user: &str) {
     "email": "{user}@test.invalid",
     "expires_at": "2030-01-01T00:00:00Z",
     "refresh_token": "pty-test-refresh-token",
-    "oidc_issuer": "https://auth.x.ai",
-    "oidc_client_id": "b1a00492-073a-47ea-816f-4c329264a828",
+    "oidc_issuer": "https://auth.kimi.com",
+    "oidc_client_id": "17e5f671-d194-4dfb-9706-5516cb48c098",
     "coding_data_retention_opt_out": false
   }}
 }}"#

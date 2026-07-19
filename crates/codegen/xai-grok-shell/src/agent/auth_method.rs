@@ -448,12 +448,12 @@ pub fn cached_token_auth_method() -> acp::AuthMethod {
 
 pub const GROK_COM_METHOD_ID: &str = "grok.com";
 
-/// xAI OAuth2/OIDC auth. Method id `"grok.com"` kept for ACP wire-compat.
+/// Kimi OAuth2/OIDC auth. Method id `"grok.com"` kept for ACP wire-compat.
 pub fn grok_com_auth_method(
     label: Option<&str>,
     has_auth_provider_command: bool,
 ) -> acp::AuthMethod {
-    let name = label.unwrap_or("Grok");
+    let name = label.unwrap_or("Kimi");
     let meta = if has_auth_provider_command {
         let mut m = acp::Meta::new();
         m.insert("external_provider".to_owned(), serde_json::json!(true));

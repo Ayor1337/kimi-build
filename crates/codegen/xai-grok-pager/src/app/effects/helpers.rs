@@ -1365,6 +1365,7 @@ pub(super) fn credit_balance_from_config(
         prepaid_balance_cents: c.prepaid_balance.map(|v| v.val),
         period_type,
         is_unified_billing_user: c.is_unified_billing_user,
+        quota_rows: c.quota_rows,
     }
 }
 /// Whether the balance carries a non-zero prepaid credit balance (signed cents).

@@ -1,18 +1,18 @@
 {
-  "default": "grok-4.5",
-  "web_search": "grok-4.20-multi-agent",
-  "image_description": "grok-4.5",
-  "session_summary": "grok-4.5",
+  "default": "k3",
+  "web_search": "kimi-for-coding",
+  "image_description": "kimi-for-coding",
+  "session_summary": "kimi-for-coding",
   "models": [
     {
-      "id": "grok-4.5",
-      "model": "grok-4.5",
-      "name": "Grok 4.5",
-      "description": "SpaceXAI's new frontier model",
-      "context_window": 500000,
-      "api_backend": "responses",
+      "id": "k3",
+      "model": "k3",
+      "name": "K3",
+      "description": "Kimi's frontier model with 1M context",
+      "context_window": 1048576,
+      "api_backend": "chat_completions",
       "supports_backend_search": false,
-      "system_prompt_label": "Grok 4.5",
+      "system_prompt_label": "K3",
       "show_model_fingerprint": true,
       "supports_reasoning_effort": true,
       "reasoning_effort": "high",
@@ -27,16 +27,46 @@
           "default": true
         },
         {
-          "value": "medium",
-          "label": "Medium Effort",
-          "description": "Balanced effort with standard implementation and testing"
-        },
-        {
           "value": "low",
           "label": "Low Effort",
           "description": "Quick, fast implementations"
+        },
+        {
+          "value": "xhigh",
+          "label": "Max Effort",
+          "description": "Maximum reasoning for the hardest problems"
         }
       ]
+    },
+    {
+      "id": "kimi-for-coding",
+      "model": "kimi-for-coding",
+      "name": "K2.7 Coding",
+      "description": "Kimi K2.7 coding model",
+      "context_window": 262144,
+      "api_backend": "chat_completions",
+      "supports_backend_search": false,
+      "system_prompt_label": "K2.7 Coding",
+      "show_model_fingerprint": true,
+      "supports_reasoning_effort": false,
+      "auto_compact_threshold_percent": 80,
+      "compaction_at_tokens": true,
+      "compactions_remaining": 1
+    },
+    {
+      "id": "kimi-for-coding-highspeed",
+      "model": "kimi-for-coding-highspeed",
+      "name": "K2.7 Coding Highspeed",
+      "description": "Kimi K2.7 coding model, high-speed variant",
+      "context_window": 262144,
+      "api_backend": "chat_completions",
+      "supports_backend_search": false,
+      "system_prompt_label": "K2.7 Coding Highspeed",
+      "show_model_fingerprint": true,
+      "supports_reasoning_effort": false,
+      "auto_compact_threshold_percent": 80,
+      "compaction_at_tokens": true,
+      "compactions_remaining": 1
     }
   ]
 }

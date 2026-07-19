@@ -92,29 +92,35 @@ pub(crate) async fn oidc_token_exchange(auth: &GrokAuth) -> OidcRefreshResult {
         )
     };
 
-    let discovery = match discover(issuer).await {
-        Ok(d) => d,
-        Err(e) => {
-            let (mono_ms, wall_ms, suspended_ms, suspected_suspend) = timing();
-            crate::unified_log::error(
-                "oidc try_refresh_pure discovery failed",
-                None,
-                Some(serde_json::json!({
-                    "error": format!("{e:#}"),
-                    "mono_ms": mono_ms,
-                    "wall_ms": wall_ms,
-                    "suspended_ms": suspended_ms,
-                    "suspected_suspend": suspected_suspend,
-                })),
-            );
-            if suspected_suspend {
-                emit_suspend_spanned("discovery_failed", suspended_ms);
+    // Kimi's OAuth host serves no OIDC discovery document; its token endpoint
+    // is a fixed path. Custom enterprise IdPs keep the discovery flow.
+    let token_endpoint = if crate::auth::config::is_xai_oauth2_issuer(issuer) {
+        format!("{}/api/oauth/token", issuer.trim_end_matches('/'))
+    } else {
+        match discover(issuer).await {
+            Ok(d) => d.token_endpoint,
+            Err(e) => {
+                let (mono_ms, wall_ms, suspended_ms, suspected_suspend) = timing();
+                crate::unified_log::error(
+                    "oidc try_refresh_pure discovery failed",
+                    None,
+                    Some(serde_json::json!({
+                        "error": format!("{e:#}"),
+                        "mono_ms": mono_ms,
+                        "wall_ms": wall_ms,
+                        "suspended_ms": suspended_ms,
+                        "suspected_suspend": suspected_suspend,
+                    })),
+                );
+                if suspected_suspend {
+                    emit_suspend_spanned("discovery_failed", suspended_ms);
+                }
+                return OidcRefreshResult::Failed;
             }
-            return OidcRefreshResult::Failed;
         }
     };
     let tokens = match refresh_tokens(
-        &discovery.token_endpoint,
+        &token_endpoint,
         refresh_tok,
         client_id,
         auth.principal_type.as_deref(),
