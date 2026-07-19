@@ -450,14 +450,14 @@ async fn handle_reload_all_mcp_servers(agent: &MvpAgent) -> ExtResult {
 
 /// Reload MCP servers for sessions whose `cwd` matches (or sits beneath)
 /// the project root passed in `params.cwd`. Called by the config
-/// hot-reload watcher when `<cwd>/.grok/config.toml`,
+/// hot-reload watcher when `<cwd>/.kami/config.toml`,
 /// `<cwd>/.mcp.json`, or `<cwd>/.claude.json` changes.
 ///
 /// Sessions in unrelated cwds are intentionally NOT touched — that is
 /// the whole point of [`crate::config::reloader::ConfigUpdate::
 /// ProjectMcpServersChanged`] being a per-cwd variant. The legacy
 /// [`handle_reload_all_mcp_servers`] is still the fan-out for global
-/// `~/.grok/config.toml` edits.
+/// `~/.kami/config.toml` edits.
 async fn handle_reload_project_mcp_servers(agent: &MvpAgent, args: &acp::ExtRequest) -> ExtResult {
     #[derive(Deserialize)]
     struct Params {
@@ -597,7 +597,7 @@ fn handle_reload_models(agent: &MvpAgent) -> ExtResult {
 
 // internal/reload_models_cache
 
-/// Hot-reload the model catalog from `~/.grok/models_cache.json` after an
+/// Hot-reload the model catalog from `~/.kami/models_cache.json` after an
 /// external write detected by the config watcher.
 ///
 /// Routed through the agent's ACP stream (injected by the

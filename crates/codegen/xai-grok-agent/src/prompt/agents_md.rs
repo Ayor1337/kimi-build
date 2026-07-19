@@ -1,10 +1,10 @@
 //! AGENTS.md / Claude.md / rules directory discovery and loading.
 //!
-//! Searches from cwd to repo root, plus `~/.grok/`. Also discovers
+//! Searches from cwd to repo root, plus `~/.kami/`. Also discovers
 //! `*.md` files in rules directories: vendor-prefixed `.grok/rules/`,
 //! `.claude/rules/`, and `.cursor/rules/` in project directories, and a
 //! plain `rules/` directly under the vendor-qualified home-scope roots
-//! (`~/.grok/rules/`, `~/.claude/rules/`, `~/.cursor/rules/`).
+//! (`~/.kami/rules/`, `~/.claude/rules/`, `~/.cursor/rules/`).
 
 use std::path::{Path, PathBuf};
 
@@ -141,7 +141,7 @@ fn add_discovered_candidate(
     });
 }
 
-/// Read Agents.md from ~/.grok/, git repo root, and session cwd.
+/// Read Agents.md from ~/.kami/, git repo root, and session cwd.
 /// Returns a list of AgentConfigFile with their file names, full paths, and contents.
 ///
 /// `compat` gates which vendor (`.claude`/`.cursor`) surfaces are scanned for
@@ -616,7 +616,7 @@ mod tests {
         fs::create_dir_all(grok_home.join("rules")).unwrap();
         fs::create_dir_all(home.join(".claude/rules")).unwrap();
         fs::create_dir_all(home.join(".cursor/rules")).unwrap();
-        fs::create_dir_all(repo.join(".grok/rules")).unwrap();
+        fs::create_dir_all(repo.join(".kami/rules")).unwrap();
         fs::create_dir_all(repo.join(".claude/rules")).unwrap();
         fs::create_dir_all(repo.join(".cursor/rules")).unwrap();
         init_git_repo(&repo);
@@ -627,14 +627,14 @@ mod tests {
             (home.join(".claude/rules/a.md"), "claude-a"),
             (home.join(".cursor/rules/a.md"), "cursor-a"),
             (repo.join("AGENTS.md"), "repo-named"),
-            (repo.join(".grok/rules/a.md"), "repo-grok"),
+            (repo.join(".kami/rules/a.md"), "repo-grok"),
             (repo.join(".claude/rules/a.md"), "repo-claude"),
             (repo.join(".cursor/rules/a.md"), "repo-cursor"),
         ] {
             fs::write(path, content).unwrap();
         }
         for path in [
-            grok_home.join(".grok/rules/doubled.md"),
+            grok_home.join(".kami/rules/doubled.md"),
             home.join(".claude/.claude/rules/doubled.md"),
             home.join(".cursor/.cursor/rules/doubled.md"),
         ] {
@@ -744,12 +744,12 @@ mod tests {
         let repo = tmp.path().join("repo");
         let nested = repo.join("nested");
         fs::create_dir_all(nested.join("rules")).unwrap();
-        fs::create_dir_all(nested.join(".grok/rules")).unwrap();
+        fs::create_dir_all(nested.join(".kami/rules")).unwrap();
         init_git_repo(&repo);
         fs::write(nested.join("rules/home.md"), "nested-home-rule").unwrap();
         fs::write(repo.join("AGENTS.md"), "repo-named").unwrap();
         fs::write(nested.join("AGENTS.md"), "nested-named").unwrap();
-        fs::write(nested.join(".grok/rules/project.md"), "nested-project-rule").unwrap();
+        fs::write(nested.join(".kami/rules/project.md"), "nested-project-rule").unwrap();
 
         let configs = read_agents_config_with_roots(
             nested.to_str().unwrap(),
@@ -778,14 +778,14 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let repo = tmp.path().join("repo");
         fs::create_dir_all(repo.join("rules")).unwrap();
-        fs::create_dir_all(repo.join(".grok/rules")).unwrap();
+        fs::create_dir_all(repo.join(".kami/rules")).unwrap();
         fs::create_dir_all(repo.join(".claude/rules")).unwrap();
         init_git_repo(&repo);
         fs::write(repo.join("rules/home.md"), "home-rule").unwrap();
-        fs::write(repo.join(".grok/rules/project.md"), "project-grok-rule").unwrap();
+        fs::write(repo.join(".kami/rules/project.md"), "project-grok-rule").unwrap();
         fs::write(repo.join(".claude/rules/project.md"), "project-claude-rule").unwrap();
-        fs::create_dir_all(repo.join(".grok/.grok/rules")).unwrap();
-        fs::write(repo.join(".grok/.grok/rules/doubled.md"), "doubled").unwrap();
+        fs::create_dir_all(repo.join(".kami/.kami/rules")).unwrap();
+        fs::write(repo.join(".kami/.kami/rules/doubled.md"), "doubled").unwrap();
 
         let configs = read_agents_config_with_roots(
             repo.to_str().unwrap(),
@@ -881,7 +881,7 @@ mod tests {
         fs::create_dir_all(grok_home.join("rules")).unwrap();
         fs::create_dir_all(home.join(".claude/rules")).unwrap();
         fs::create_dir_all(home.join(".cursor/rules")).unwrap();
-        fs::create_dir_all(repo.join(".grok/rules")).unwrap();
+        fs::create_dir_all(repo.join(".kami/rules")).unwrap();
         fs::create_dir_all(repo.join(".claude/rules")).unwrap();
         fs::create_dir_all(repo.join(".cursor/rules")).unwrap();
         init_git_repo(&repo);
@@ -891,7 +891,7 @@ mod tests {
             (grok_home.join("rules/global.md"), "custom-home-body"),
             (home.join(".claude/rules/global.md"), "claude-body"),
             (home.join(".cursor/rules/global.md"), "cursor-body"),
-            (repo.join(".grok/rules/project.md"), "grok-project-body"),
+            (repo.join(".kami/rules/project.md"), "grok-project-body"),
             (repo.join(".claude/rules/project.md"), "claude-project-body"),
             (repo.join(".cursor/rules/project.md"), "cursor-project-body"),
         ] {

@@ -30,10 +30,10 @@ A hook is a shell command or HTTP endpoint that Grok calls when a specific lifec
 1. Create the hooks directory:
 
    ```sh
-   mkdir -p ~/.grok/hooks
+   mkdir -p ~/.kami/hooks
    ```
 
-2. Create a hook file, e.g. `~/.grok/hooks/session-start.json`:
+2. Create a hook file, e.g. `~/.kami/hooks/session-start.json`:
 
    ```json
    {
@@ -61,17 +61,17 @@ Hooks are discovered from several places (all are merged):
 
 | Scope | Path | Trusted? | Notes |
 |-------|------|----------|-------|
-| Global | `~/.grok/hooks/*.json` | Always | Personal hooks |
+| Global | `~/.kami/hooks/*.json` | Always | Personal hooks |
 | Global | `~/.claude/settings.json` (and `settings.local.json`) | Always | Claude Code compatibility (configurable) |
 | Global | `~/.cursor/hooks.json` | Always | Cursor compatibility (configurable) |
-| Project | `<project>/.grok/hooks/*.json` | Requires trust | Per-repo automation |
+| Project | `<project>/.kami/hooks/*.json` | Requires trust | Per-repo automation |
 | Project | `<project>/.claude/settings.json` (and `settings.local.json`) | Requires trust | Claude compatibility (configurable) |
 | Project | `<project>/.cursor/hooks.json` | Requires trust | Cursor compatibility (configurable) |
 | Plugin | Bundled inside installed plugins | Per-plugin | Shared team hooks |
 
-The Claude and Cursor hook sources are scanned by default. To disable scanning for a specific vendor, set `[compat.<vendor>] hooks = false` in `~/.grok/config.toml` or the corresponding environment variable. See [Configuration](05-configuration.md#harness-compatibility) for details.
+The Claude and Cursor hook sources are scanned by default. To disable scanning for a specific vendor, set `[compat.<vendor>] hooks = false` in `~/.kami/config.toml` or the corresponding environment variable. See [Configuration](05-configuration.md#harness-compatibility) for details.
 
-**Trusting a project**: The first time you open a project with hooks, you must trust it before its project hooks will run -- until then they are silently skipped. Grant trust by running `/hooks-trust` (or launching with `--trust`); the decision is recorded in the unified folder-trust store (`~/.grok/trusted_folders.toml`), the same gate that governs repo-local MCP/LSP servers. Global hooks in `~/.grok/hooks/` are always trusted and need no entry. This prevents untrusted repos from running arbitrary code.
+**Trusting a project**: The first time you open a project with hooks, you must trust it before its project hooks will run -- until then they are silently skipped. Grant trust by running `/hooks-trust` (or launching with `--trust`); the decision is recorded in the unified folder-trust store (`~/.kami/trusted_folders.toml`), the same gate that governs repo-local MCP/LSP servers. Global hooks in `~/.kami/hooks/` are always trusted and need no entry. This prevents untrusted repos from running arbitrary code.
 
 Because hooks are unified under folder-trust, a `--trust` / `/hooks-trust` grant trusts the whole folder for **MCP, LSP, and hooks** together, and cascades to subdirectories. Conversely, disabling folder-trust (`GROK_FOLDER_TRUST=0` or `[folder_trust] enabled = false`) ungates project hooks along with MCP/LSP.
 
@@ -357,7 +357,7 @@ echo '{"decision": "allow"}'
 
 ## Security Notes
 
-- Global hooks (`~/.grok/hooks/`) run with your user permissions -- treat them like shell scripts.
+- Global hooks (`~/.kami/hooks/`) run with your user permissions -- treat them like shell scripts.
 - Project hooks require folder trust (`/hooks-trust` or `--trust`, the same gate as repo-local MCP/LSP) to prevent supply-chain attacks from malicious repos.
 - HTTP hooks send session data -- only use trusted endpoints.
 
@@ -369,7 +369,7 @@ echo '{"decision": "allow"}'
 2. **Use explicit `deny` to block** -- hooks fail-open on any error, so a hook that crashes will not block the tool. To enforce policy, your hook must run to completion and emit `{"decision":"deny","reason":"..."}` on stdout. Always handle errors inside your script so it can return an explicit decision.
 3. **Use absolute paths or relative to hook file** -- scripts in `bin/` next to the JSON file are portable.
 4. **Test with the modal** -- press `Ctrl+L` (non–VS Code family) or run `/hooks` to verify hooks are loaded and matching before relying on them.
-5. **Version control project hooks** -- commit `.grok/hooks/` (but never secrets).
+5. **Version control project hooks** -- commit `.kami/hooks/` (but never secrets).
 
 ---
 

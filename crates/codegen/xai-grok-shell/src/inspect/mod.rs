@@ -468,7 +468,7 @@ fn instruction_file_type(
     if path
         .parent()
         .is_some_and(|parent| parent == grok_home.join("rules"))
-        || has_rules_directory(file_path, ".grok")
+        || has_rules_directory(file_path, ".kami")
         || has_rules_directory(file_path, ".cursor")
         || (!claude_imported && has_rules_directory(file_path, ".claude"))
         || extra_rule_prefixes
@@ -1632,7 +1632,7 @@ mod tests {
             ("claude", "/repo/.claude/rules/team.md"),
             ("claude", r"C:\repo\.claude\rules\team.md"),
         ] {
-            let file_type = instruction_file_type(path, Path::new("/home/user/.grok"), false, &[]);
+            let file_type = instruction_file_type(path, Path::new("/home/user/.kami"), false, &[]);
             assert_eq!(file_type, "rules");
             assert_eq!(
                 instruction_compat_status(&Some(vendor.to_owned()), file_type, &report),
@@ -1640,9 +1640,9 @@ mod tests {
             );
         }
 
-        for path in ["/repo/.grok/rules/team.md", r"C:\repo\.grok\rules\team.md"] {
+        for path in ["/repo/.kami/rules/team.md", r"C:\repo\.grok\rules\team.md"] {
             assert_eq!(
-                instruction_file_type(path, Path::new("/home/user/.grok"), false, &[]),
+                instruction_file_type(path, Path::new("/home/user/.kami"), false, &[]),
                 "rules"
             );
         }
@@ -1651,7 +1651,7 @@ mod tests {
             r"C:\repo\.cursor\rules\team.md",
         ] {
             assert_eq!(
-                instruction_file_type(path, Path::new("/home/user/.grok"), true, &[]),
+                instruction_file_type(path, Path::new("/home/user/.kami"), true, &[]),
                 "rules"
             );
         }
@@ -1659,7 +1659,7 @@ mod tests {
             "/repo/.claude/rules/team.md",
             r"C:\repo\.claude\rules\team.md",
         ] {
-            let file_type = instruction_file_type(path, Path::new("/home/user/.grok"), true, &[]);
+            let file_type = instruction_file_type(path, Path::new("/home/user/.kami"), true, &[]);
             assert_eq!(file_type, "agents_md");
             assert_eq!(
                 instruction_compat_status(&Some("claude".to_owned()), file_type, &report),
@@ -1671,7 +1671,7 @@ mod tests {
             r"C:\repo\.cursor\ruleset\team.md",
         ] {
             assert_eq!(
-                instruction_file_type(path, Path::new("/home/user/.grok"), false, &[]),
+                instruction_file_type(path, Path::new("/home/user/.kami"), false, &[]),
                 "agents_md"
             );
         }
@@ -1688,7 +1688,7 @@ mod tests {
             ));
         }
         for path in [
-            "/repo/config/.grok/rules/project.md",
+            "/repo/config/.kami/rules/project.md",
             "/repo/config/src/AGENTS.md",
         ] {
             assert!(matches!(
@@ -1807,7 +1807,7 @@ mod tests {
     fn requirements_layer_contributes_requires_non_empty_post_strip_table() {
         // A `fail_closed`-only file is kept by the loader but with an empty
         // post-strip table, so it must not count as contributing.
-        let path = "/home/u/.grok/requirements.toml";
+        let path = "/home/u/.kami/requirements.toml";
         let layer = |v| crate::config::RequirementsLayer {
             value: v,
             source: crate::config::RequirementsSource::File(std::path::PathBuf::from(path)),
@@ -1915,21 +1915,21 @@ mod tests {
 
     #[test]
     fn skill_entry_source_maps_scopes() {
-        let home = Path::new("/home/u/.grok");
+        let home = Path::new("/home/u/.kami");
 
-        let s = skill_fixture("a", "/repo/.grok/skills/a/SKILL.md", SkillScope::Local);
+        let s = skill_fixture("a", "/repo/.kami/skills/a/SKILL.md", SkillScope::Local);
         assert!(matches!(
             skill_entry_source(&s, home),
             ConfigSource::Project { .. }
         ));
 
-        let s = skill_fixture("b", "/repo/.grok/skills/b/SKILL.md", SkillScope::Repo);
+        let s = skill_fixture("b", "/repo/.kami/skills/b/SKILL.md", SkillScope::Repo);
         assert!(matches!(
             skill_entry_source(&s, home),
             ConfigSource::Project { .. }
         ));
 
-        let s = skill_fixture("c", "/home/u/.grok/skills/c/SKILL.md", SkillScope::User);
+        let s = skill_fixture("c", "/home/u/.kami/skills/c/SKILL.md", SkillScope::User);
         assert!(matches!(
             skill_entry_source(&s, home),
             ConfigSource::User { .. }
@@ -1937,7 +1937,7 @@ mod tests {
 
         let s = skill_fixture(
             "d",
-            "/home/u/.grok/server-skills/d/SKILL.md",
+            "/home/u/.kami/server-skills/d/SKILL.md",
             SkillScope::Server,
         );
         assert!(matches!(
@@ -1945,7 +1945,7 @@ mod tests {
             ConfigSource::Server { .. }
         ));
 
-        let s = skill_fixture("e", "/home/u/.grok/bundled/e/SKILL.md", SkillScope::Bundled);
+        let s = skill_fixture("e", "/home/u/.kami/bundled/e/SKILL.md", SkillScope::Bundled);
         assert!(matches!(
             skill_entry_source(&s, home),
             ConfigSource::Bundled { .. }
@@ -1957,11 +1957,11 @@ mod tests {
     /// else keeps its real source.
     #[test]
     fn skill_entry_source_relabels_extracted_bundled_skills() {
-        let home = Path::new("/home/u/.grok");
+        let home = Path::new("/home/u/.kami");
 
         let s = skill_fixture(
             "help",
-            "/home/u/.grok/skills/help/SKILL.md",
+            "/home/u/.kami/skills/help/SKILL.md",
             SkillScope::User,
         );
         assert!(matches!(
@@ -1970,7 +1970,7 @@ mod tests {
         ));
 
         // Bundled name in a project dir: stays project.
-        let s = skill_fixture("help", "/repo/.grok/skills/help/SKILL.md", SkillScope::Repo);
+        let s = skill_fixture("help", "/repo/.kami/skills/help/SKILL.md", SkillScope::Repo);
         assert!(matches!(
             skill_entry_source(&s, home),
             ConfigSource::Project { .. }
@@ -1991,7 +1991,7 @@ mod tests {
         // not the extracted copy — stays user.
         let s = skill_fixture(
             "help",
-            "/home/u/.grok/skills/my-tools/SKILL.md",
+            "/home/u/.kami/skills/my-tools/SKILL.md",
             SkillScope::User,
         );
         assert!(matches!(
@@ -2002,7 +2002,7 @@ mod tests {
         // Non-bundled name under <grok_home>/skills: stays user.
         let s = skill_fixture(
             "my-skill",
-            "/home/u/.grok/skills/my-skill/SKILL.md",
+            "/home/u/.kami/skills/my-skill/SKILL.md",
             SkillScope::User,
         );
         assert!(matches!(
@@ -2015,7 +2015,7 @@ mod tests {
     /// over the scope fallback.
     #[test]
     fn skill_entry_source_prefers_stamped_config_source() {
-        let home = Path::new("/home/u/.grok");
+        let home = Path::new("/home/u/.kami");
         let mut s = skill_fixture("cfg", "/team/skills/cfg/SKILL.md", SkillScope::User);
         s.config_source = Some(ConfigSource::ConfigToml {
             path: PathBuf::from("/team/skills/cfg/SKILL.md"),
@@ -2039,7 +2039,7 @@ mod tests {
             )
             .unwrap();
         };
-        // Test-unique names: discovery also reads this machine's real ~/.grok dirs.
+        // Test-unique names: discovery also reads this machine's real ~/.kami dirs.
         let extra = tempfile::tempdir().unwrap();
         write(&extra.path().join("inspect-cfg-extra"), "inspect-cfg-extra");
         write(

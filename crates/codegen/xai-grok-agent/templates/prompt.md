@@ -41,6 +41,6 @@ Your text output is rendered as GitHub-flavored markdown (CommonMark). Use markd
 ${%- if not is_non_interactive %}
 
 <user_guide>
-Documentation about the Kimi Build CLI — including configuration, keyboard shortcuts, MCP servers, skills, theming, plugins, and more — is stored as `.md` files in `~/.grok/docs/user-guide/`. When users ask about features or how to use the CLI, read the relevant file from that directory.
+Documentation about the Kimi Build CLI — including configuration, keyboard shortcuts, MCP servers, skills, theming, plugins, and more — is stored as `.md` files in `~/.kami/docs/user-guide/`. When users ask about features or how to use the CLI, read the relevant file from that directory.
 </user_guide>
 ${%- endif %}

@@ -219,7 +219,7 @@ impl IndexEntry {
 /// Returns `None` if no file exists. Returns `Err` if a file exists
 /// but can't be parsed.
 pub fn load_index(marketplace_root: &Path) -> Result<Option<MarketplaceIndex>, String> {
-    let grok_dir = marketplace_root.join(".grok-plugin");
+    let grok_dir = marketplace_root.join(".kami-plugin");
     let claude_dir = marketplace_root.join(".claude-plugin");
     let candidates = [
         grok_dir.join("marketplace.json"),
@@ -303,7 +303,7 @@ mod tests {
     #[test]
     fn load_index_valid_grok_dir() {
         let dir = tempfile::tempdir().unwrap();
-        let grok_dir = dir.path().join(".grok-plugin");
+        let grok_dir = dir.path().join(".kami-plugin");
         std::fs::create_dir_all(&grok_dir).unwrap();
         std::fs::write(
             grok_dir.join("marketplace.json"),
@@ -318,7 +318,7 @@ mod tests {
     #[test]
     fn load_index_grok_dir_takes_precedence_over_claude_dir() {
         let dir = tempfile::tempdir().unwrap();
-        for (sub, name) in [(".grok-plugin", "grok"), (".claude-plugin", "claude")] {
+        for (sub, name) in [(".kami-plugin", "grok"), (".claude-plugin", "claude")] {
             let d = dir.path().join(sub);
             std::fs::create_dir_all(&d).unwrap();
             std::fs::write(

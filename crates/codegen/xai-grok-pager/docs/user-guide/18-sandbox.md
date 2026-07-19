@@ -9,14 +9,14 @@ Sandbox mode is off by default.
 ## Quick Start
 
 ```bash
-# Run with workspace sandbox (read everywhere, write to CWD + temp dirs + ~/.grok/)
-grok --sandbox workspace
+# Run with workspace sandbox (read everywhere, write to CWD + temp dirs + ~/.kami/)
+kami --sandbox workspace
 
-# Read-only mode (read everywhere, write only to ~/.grok/ + temp dirs)
-grok --sandbox read-only
+# Read-only mode (read everywhere, write only to ~/.kami/ + temp dirs)
+kami --sandbox read-only
 
-# Most restrictive profile (read CWD + system paths, write CWD + temp dirs + ~/.grok/, no child network)
-grok --sandbox strict
+# Most restrictive profile (read CWD + system paths, write CWD + temp dirs + ~/.kami/, no child network)
+kami --sandbox strict
 ```
 
 ---
@@ -26,10 +26,10 @@ grok --sandbox strict
 | Profile               | FS Read            | FS Write                                       | Child Network | Use Case                          |
 | --------------------- | ------------------ | ---------------------------------------------- | ------------- | --------------------------------- |
 | `off` (default)       | Unrestricted       | Unrestricted                                   | Unrestricted  | No sandbox                        |
-| `workspace`           | Everywhere         | CWD + `~/.grok/` + `/tmp` + `/var/tmp`         | Allowed       | Normal development                |
+| `workspace`           | Everywhere         | CWD + `~/.kami/` + `/tmp` + `/var/tmp`         | Allowed       | Normal development                |
 | `devbox`              | Everywhere         | All top-level dirs except `/data`              | Allowed       | Disposable dev VMs                |
-| `read-only`           | Everywhere         | `~/.grok/` + `/tmp` + `/var/tmp`               | Blocked¹      | Exploration, code review          |
-| `strict`              | CWD + system paths | CWD + `~/.grok/` + `/tmp` + `/var/tmp`         | Blocked¹      | Untrusted code                    |
+| `read-only`           | Everywhere         | `~/.kami/` + `/tmp` + `/var/tmp`               | Blocked¹      | Exploration, code review          |
+| `strict`              | CWD + system paths | CWD + `~/.kami/` + `/tmp` + `/var/tmp`         | Blocked¹      | Untrusted code                    |
 
 ¹ Child-network blocking is enforced on **Linux only** (via seccomp). On macOS it is a no-op — these profiles do not restrict child-process network there.
 
@@ -37,19 +37,19 @@ To block specific files (e.g. `.env` or credential paths) on top of a profile, d
 
 ### Profile Details
 
-**workspace** -- The recommended profile for everyday development. The agent can read any file on the system (for understanding dependencies, system libraries, etc.) but can only write to the current working directory, `~/.grok/`, and temp directories (`/tmp`, `/var/tmp`, plus the macOS temp dirs). Network access is allowed for tools like `web_search` and MCP servers.
+**workspace** -- The recommended profile for everyday development. The agent can read any file on the system (for understanding dependencies, system libraries, etc.) but can only write to the current working directory, `~/.kami/`, and temp directories (`/tmp`, `/var/tmp`, plus the macOS temp dirs). Network access is allowed for tools like `web_search` and MCP servers.
 
 **devbox** -- A reserved built-in profile for disposable development VMs. The agent can read everywhere and write to every top-level directory except `/data` and the virtual filesystems (`/proc`, `/sys`, `/dev`), including the home directory. Network access is allowed. `--sandbox devbox` runs the built-in profile, which shadows any `[profiles.devbox]` you define in `sandbox.toml`.
 
-**read-only** -- Use when you want the agent to analyze code without modifying your project files. The agent can read everything but can only write to `~/.grok/` (needed for session persistence) and temp directories. Child-process network access is blocked on Linux (no-op on macOS).
+**read-only** -- Use when you want the agent to analyze code without modifying your project files. The agent can read everything but can only write to `~/.kami/` (needed for session persistence) and temp directories. Child-process network access is blocked on Linux (no-op on macOS).
 
-**strict** -- The most restrictive profile, for reviewing untrusted code. The agent can only read files within the current working directory and essential system paths. Writes are limited to CWD, `~/.grok/`, and temp directories. Child-process network access is blocked on Linux (no-op on macOS).
+**strict** -- The most restrictive profile, for reviewing untrusted code. The agent can only read files within the current working directory and essential system paths. Writes are limited to CWD, `~/.kami/`, and temp directories. Child-process network access is blocked on Linux (no-op on macOS).
 
 ---
 
 ## Custom Profiles
 
-Create custom sandbox profiles in `~/.grok/sandbox.toml` (global) or `.grok/sandbox.toml` (per-project):
+Create custom sandbox profiles in `~/.kami/sandbox.toml` (global) or `.kami/sandbox.toml` (per-project):
 
 ```toml
 [profiles.project]
@@ -70,7 +70,7 @@ deny = ["/data/shared-secrets", "**/.env", "**/*.pem"]
 Use the custom profile:
 
 ```bash
-grok --sandbox project
+kami --sandbox project
 ```
 
 A custom profile can't reuse a built-in name. `--sandbox devbox` always runs the built-in `devbox` profile, shadowing any `[profiles.devbox]` you define.
@@ -146,8 +146,8 @@ The sandbox is **irreversible** once applied. The agent cannot relax restriction
 ## Resuming Sessions
 
 The profile a session was started with is saved with the session and is **fixed
-for the life of the session**. When you resume it (`grok --resume <id>`,
-`grok --continue`, or `grok -r`), Grok restores that same profile automatically —
+for the life of the session**. When you resume it (`kami --resume <id>`,
+`kami --continue`, or `kami -r`), Grok restores that same profile automatically —
 so a session started with `--sandbox workspace` won't silently come back under a
 stricter default and break commands that previously worked.
 
@@ -193,7 +193,7 @@ In practice, on Linux this means:
 
 ## Event Logging
 
-Sandbox events are logged to `~/.grok/sandbox-events.jsonl` for debugging. Events include:
+Sandbox events are logged to `~/.kami/sandbox-events.jsonl` for debugging. Events include:
 
 - Profile applied (which profile, timestamp)
 - Violations (attempted access to denied paths)

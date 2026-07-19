@@ -1,6 +1,6 @@
 # Terminal Support and Troubleshooting
 
-Grok Build runs as a full-screen TUI. To draw the interface, it relies on terminal escape sequences for color, clipboard, mouse, and full-screen control. Some terminals, multiplexers, and SSH sessions handle these sequences differently.
+Kimi Build runs as a full-screen TUI. To draw the interface, it relies on terminal escape sequences for color, clipboard, mouse, and full-screen control. Some terminals, multiplexers, and SSH sessions handle these sequences differently.
 
 ## Quick Fixes
 
@@ -100,18 +100,18 @@ Grok writes to the clipboard through up to three routes, shown in the **Clipboar
 
 **SSH and selected text**: a remote Grok process usually cannot read the local terminal's PRIMARY or CLIPBOARD selection. Use terminal-native `Shift+Insert`, or hold `Shift` while middle-clicking when your terminal uses that gesture to bypass mouse reporting. The terminal then sends the local selection through the PTY instead of asking the remote process to access it.
 
-**Unknown terminals over SSH**: when Grok cannot identify the outer terminal, it sends the copy but reports delivery as unverified. If paste fails, reconnect with `grok wrap <ssh command>` or use `/minimal`.
+**Unknown terminals over SSH**: when Grok cannot identify the outer terminal, it sends the copy but reports delivery as unverified. If paste fails, reconnect with `kami wrap <ssh command>` or use `/minimal`.
 
 **Known limitation — Apple Terminal + SSH**:
 Apple Terminal ignores OSC 52, so copying from a Grok session over SSH can't reach your local clipboard. Use the workaround below.
 
-**Temporary workaround**: Use `grok wrap ssh` instead of plain `ssh` (for example, `grok wrap ssh user@host`). It runs the command in a local PTY that intercepts OSC 52 sequences, including tmux-wrapped ones, and writes their contents to your local clipboard. The same command wraps anything else whose clipboard can't reach you — for example `grok wrap docker exec -it <container> bash` or `grok wrap kubectl exec -it <pod> -- bash`.
+**Temporary workaround**: Use `kami wrap ssh` instead of plain `ssh` (for example, `kami wrap ssh user@host`). It runs the command in a local PTY that intercepts OSC 52 sequences, including tmux-wrapped ones, and writes their contents to your local clipboard. The same command wraps anything else whose clipboard can't reach you — for example `kami wrap docker exec -it <container> bash` or `kami wrap kubectl exec -it <pod> -- bash`.
 
-`grok wrap` also protects your local terminal from dirty disconnects: if the wrapped command dies while a remote TUI has mouse reporting, the alternate screen, or similar modes enabled (for example the SSH connection drops mid-session), wrap resets those modes on exit instead of leaving the terminal spraying mouse escape codes.
+`kami wrap` also protects your local terminal from dirty disconnects: if the wrapped command dies while a remote TUI has mouse reporting, the alternate screen, or similar modes enabled (for example the SSH connection drops mid-session), wrap resets those modes on exit instead of leaving the terminal spraying mouse escape codes.
 
-When Grok starts inside an SSH session that isn't already running under `grok wrap`, a one-time contextual tip above the prompt recommends `grok wrap ssh <host>` (it stops appearing on its own once you launch through wrap). To turn it off, set `ssh_wrap = false` under `[ui.contextual_hints]` in `~/.grok/config.toml`, or use `/settings` → **Show contextual hints** → **SSH wrap**.
+When Grok starts inside an SSH session that isn't already running under `kami wrap`, a one-time contextual tip above the prompt recommends `kami wrap ssh <host>` (it stops appearing on its own once you launch through wrap). To turn it off, set `ssh_wrap = false` under `[ui.contextual_hints]` in `~/.kami/config.toml`, or use `/settings` → **Show contextual hints** → **SSH wrap**.
 
-> **Warning**: `grok wrap` is **experimental** and may misbehave in some setups.
+> **Warning**: `kami wrap` is **experimental** and may misbehave in some setups.
 
 **iTerm2 setting**:
 iTerm2 requires explicit permission for OSC 52:
@@ -131,7 +131,7 @@ This setting is off by default for security reasons. Without it, OSC 52 writes f
 
 **Fix**:
 - In Zellij or control mode, Grok intentionally runs inline (no alt screen).
-- Set `[terminal] alt_screen = "always"` in `~/.grok/pager.toml` to force fullscreen.
+- Set `[terminal] alt_screen = "always"` in `~/.kami/pager.toml` to force fullscreen.
 - Use the CLI flag `--no-alt-screen` to disable alt-screen mode entirely (useful for debugging or when the alternate screen causes issues in your terminal).
 
 ### Problem: Zellij keybindings interfere with Grok (Ctrl+g, Ctrl+o, etc.)
@@ -163,7 +163,7 @@ Add this after `config = wezterm.config_builder()` in `~/.config/wezterm/wezterm
 config.enable_kitty_keyboard = true
 ```
 
-Reload (`Cmd+Shift+R` or restart WezTerm) and restart `grok`.
+Reload (`Cmd+Shift+R` or restart WezTerm) and restart `kami`.
 
 **Verify**: Run `/terminal-setup` inside Grok. While a turn is active, you see the interject hint, and `Ctrl+Enter` interjects.
 

@@ -15,7 +15,7 @@ environment:
 workspace:
   git_init: true
   files:
-    ".grok/skills/test-skill/SKILL.md": "---\nname: test-skill\ndescription: Test skill for echo styling.\n---\n\nDo the thing.\n"
+    ".kami/skills/test-skill/SKILL.md": "---\nname: test-skill\ndescription: Test skill for echo styling.\n---\n\nDo the thing.\n"
 mock:
   response: "MIDTEXT_SKILL_ECHO_DONE assistant reply after the mid-text skill prompt."
 steps:

@@ -201,10 +201,10 @@ impl WorktreeDb {
         })
     }
 
-    /// Open the default DB at `~/.grok/worktrees.db`.
+    /// Open the default DB at `~/.kami/worktrees.db`.
     ///
     /// Discovers grok home via `$GROK_HOME`, falling back to the canonicalized
-    /// `$HOME/.grok` (matching `xai_grok_config::grok_home`).
+    /// `$HOME/.kami` (matching `xai_grok_config::grok_home`).
     /// Path is resolved fresh each call (~1µs env var read) to support
     /// test overrides. Each call opens its own connection — callers in hot
     /// paths should cache the `WorktreeDb` instance.
@@ -346,7 +346,7 @@ pub fn resolve_grok_home() -> Result<PathBuf> {
     // tree as trust/hooks even when it is symlinked. The dunce canonicalization
     // must stay in sync with xai_grok_config::default_grok_home();
     // home resolution deliberately differs ($HOME here vs std::env::home_dir()).
-    Ok(dunce::canonicalize(&home).unwrap_or(home).join(".grok"))
+    Ok(dunce::canonicalize(&home).unwrap_or(home).join(".kami"))
 }
 
 /// Serializes tests that mutate the process-global `GROK_HOME` env var so they

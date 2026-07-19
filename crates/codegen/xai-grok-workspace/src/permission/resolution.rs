@@ -190,7 +190,7 @@ fn extract_toml_permissions(
 
 /// Load `[permission]` rules from requirements.toml layers. Trust keys on the
 /// `is_system` flag (set at load, never from `path`): system → `SystemRequirements`,
-/// user `~/.grok` → `Requirements`, so [`is_admin_source`] trusts only the root tier.
+/// user `~/.kami` → `Requirements`, so [`is_admin_source`] trusts only the root tier.
 fn load_requirements_permissions() -> Vec<Sourced<PermissionRule>> {
     xai_grok_config::requirements_layers()
         .into_iter()
@@ -209,8 +209,8 @@ fn load_requirements_permissions() -> Vec<Sourced<PermissionRule>> {
         .collect()
 }
 
-/// Find every `<dir>/.grok/config.toml` from `cwd` upward to the git repo
-/// root (or just `<cwd>/.grok/config.toml` when there is no git repo).
+/// Find every `<dir>/.kami/config.toml` from `cwd` upward to the git repo
+/// root (or just `<cwd>/.kami/config.toml` when there is no git repo).
 ///
 /// Returned paths are ordered from repo root (lowest priority) to `cwd`
 /// (highest priority), matching `xai-grok-shell::config::find_project_configs`.
@@ -223,7 +223,7 @@ fn find_project_grok_configs(cwd: &Path) -> Vec<PathBuf> {
     if let Some(ref root) = git_root {
         let mut current = Some(cwd.to_path_buf());
         while let Some(dir) = current {
-            let p = dir.join(".grok").join("config.toml");
+            let p = dir.join(".kami").join("config.toml");
             if p.is_file() {
                 configs.push(p);
             }
@@ -234,7 +234,7 @@ fn find_project_grok_configs(cwd: &Path) -> Vec<PathBuf> {
         }
         configs.reverse();
     } else {
-        let p = cwd.join(".grok").join("config.toml");
+        let p = cwd.join(".kami").join("config.toml");
         if p.is_file() {
             configs.push(p);
         }
@@ -244,7 +244,7 @@ fn find_project_grok_configs(cwd: &Path) -> Vec<PathBuf> {
 
 /// Load `[permission]` rules from native Grok TOML config files:
 ///
-///   * `~/.grok/config.toml` (lowest priority)
+///   * `~/.kami/config.toml` (lowest priority)
 ///   * Each `.grok/config.toml` from the git repo root down to `cwd`
 ///     (highest priority last)
 ///
@@ -253,7 +253,7 @@ fn find_project_grok_configs(cwd: &Path) -> Vec<PathBuf> {
 fn load_config_toml_permissions(cwd: &Path) -> Vec<Sourced<PermissionRule>> {
     let mut rules = Vec::new();
 
-    // Global `~/.grok/config.toml` first (lowest priority within this layer).
+    // Global `~/.kami/config.toml` first (lowest priority within this layer).
     // Gated on user_grok_home() so a project's .grok/config.toml is never read as
     // global permissions when neither GROK_HOME nor a home dir resolves.
     if let Some(global_path) = xai_grok_config::user_grok_home().map(|g| g.join("config.toml"))
@@ -991,7 +991,7 @@ fn requirements_lock_bool(ui: Option<&toml::Value>, key: &str, path: &Path) -> O
 }
 
 /// Pure form of [`yolo_disabled_by_policy`] over pre-loaded layers (testable
-/// without `~/.grok`); `path` only names the layer in a non-bool warning.
+/// without `~/.kami`); `path` only names the layer in a non-bool warning.
 fn resolve_yolo_policy_block<'a>(
     requirement_layers: impl Iterator<Item = (&'a Path, &'a toml::Value)>,
 ) -> Option<&'static str> {
@@ -3152,7 +3152,7 @@ mod tests {
             }
         }
 
-        let p = Path::new("/etc/grok/requirements.toml");
+        let p = Path::new("/etc/kami/requirements.toml");
         let bad = layer("[ui]\ndisable_bypass_permissions_mode = \"true\"\n");
 
         let writer = CapturingWriter::default();
@@ -3179,7 +3179,7 @@ mod tests {
             "missing non-bool warning in: {out}"
         );
         assert!(
-            out.contains("/etc/grok/requirements.toml"),
+            out.contains("/etc/kami/requirements.toml"),
             "non-bool warning must name the layer in: {out}"
         );
     }
@@ -3281,19 +3281,19 @@ mod tests {
     #[test]
     fn admin_source_trusts_only_root_owned_tiers() {
         // Only managed-settings and the system-dir requirements layer are admin;
-        // the user-writable `~/.grok/requirements.toml` is not, despite its path.
+        // the user-writable `~/.kami/requirements.toml` is not, despite its path.
         let p = std::path::PathBuf::from("x");
         assert!(is_admin_source(&RequirementSource::ManagedSettings {
             path: p.clone()
         }));
         assert!(is_admin_source(&RequirementSource::SystemRequirements {
-            path: "/etc/grok/requirements.toml".into(),
+            path: "/etc/kami/requirements.toml".into(),
         }));
         assert!(!is_admin_source(&RequirementSource::Requirements {
-            path: "/home/u/.grok/requirements.toml".into(),
+            path: "/home/u/.kami/requirements.toml".into(),
         }));
         assert!(!is_admin_source(&RequirementSource::ManagedConfig {
-            path: "/etc/grok/managed_config.toml".into(),
+            path: "/etc/kami/managed_config.toml".into(),
         }));
         assert!(!is_admin_source(&RequirementSource::Config {
             path: p.clone()
@@ -3324,14 +3324,14 @@ mod tests {
             sourced(
                 allow_any(Some("**/*")),
                 RequirementSource::Requirements {
-                    path: "/home/u/.grok/requirements.toml".into(),
+                    path: "/home/u/.kami/requirements.toml".into(),
                 },
             ),
-            // Managed config: defaults tier, untrusted even from /etc/grok.
+            // Managed config: defaults tier, untrusted even from /etc/kami.
             sourced(
                 allow_any(Some("*")),
                 RequirementSource::ManagedConfig {
-                    path: "/etc/grok/managed_config.toml".into(),
+                    path: "/etc/kami/managed_config.toml".into(),
                 },
             ),
             // Scoped Allow(Any) from an untrusted source — not a catch-all, kept.
@@ -3343,7 +3343,7 @@ mod tests {
             sourced(
                 allow_any(Some("*")),
                 RequirementSource::SystemRequirements {
-                    path: "/etc/grok/requirements.toml".into(),
+                    path: "/etc/kami/requirements.toml".into(),
                 },
             ),
             sourced(
@@ -3403,10 +3403,10 @@ mod tests {
     fn drop_untrusted_freeform_catchalls_respects_source_and_scope() {
         let sourced = |value, source| Sourced { value, source };
         let untrusted = || RequirementSource::Requirements {
-            path: "/home/u/.grok/requirements.toml".into(),
+            path: "/home/u/.kami/requirements.toml".into(),
         };
         let admin = || RequirementSource::SystemRequirements {
-            path: "/etc/grok/requirements.toml".into(),
+            path: "/etc/kami/requirements.toml".into(),
         };
         let rules = vec![
             // Bare `allow = ["Bash"]` from an untrusted source — dropped.

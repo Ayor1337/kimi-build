@@ -13,14 +13,14 @@ object that any host can consume — whether that host is
 ### From a definition file
 
 Agent definitions are **Markdown files with YAML frontmatter**, stored
-in `.grok/agents/` (project-level) or `~/.grok/agents/` (user-level).
+in `.grok/agents/` (project-level) or `~/.kami/agents/` (user-level).
 
 ```rust
 use xai_grok_agent::{AgentDefinition, AgentBuilder};
 use xai_grok_tools::notification::ToolNotificationHandle;
 
 // 1. Parse the definition file
-let def = AgentDefinition::from_file(".grok/agents/code-reviewer.md")?;
+let def = AgentDefinition::from_file(".kami/agents/code-reviewer.md")?;
 
 // 2. Build the agent
 let agent = AgentBuilder::new(cwd, None, ToolNotificationHandle::noop())
@@ -231,7 +231,7 @@ Agent definitions are discovered from multiple locations with priority:
 1. **Project-level** (highest priority): `.grok/agents/*.md` — walk
    from `cwd` up to the git repository root. Files found closer to
    `cwd` take priority.
-2. **User-level**: `~/.grok/agents/*.md`
+2. **User-level**: `~/.kami/agents/*.md`
 3. **Compat paths** (lowest priority): additional vendor agent
    directories under the user home (when enabled)
 4. **Built-in**: `default_grok_build()`, `browser_use()`

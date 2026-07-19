@@ -843,7 +843,7 @@ fn resolve_agent_definition_agent_profile_with_model_override() {
         std::env::remove_var("GROK_AGENT");
     }
     let tmp = tempfile::tempdir().unwrap();
-    let agents_dir = tmp.path().join(".grok").join("agents");
+    let agents_dir = tmp.path().join(".kami").join("agents");
     std::fs::create_dir_all(&agents_dir).unwrap();
     std::fs::write(
             agents_dir.join("test-architect.md"),
@@ -3682,8 +3682,8 @@ fn repo_with_project_mcp_server() -> tempfile::TempDir {
     tmp
 }
 fn write_project_subagent_definitions(cwd: &std::path::Path) {
-    let roles = cwd.join(".grok/roles");
-    let personas = cwd.join(".grok/personas");
+    let roles = cwd.join(".kami/roles");
+    let personas = cwd.join(".kami/personas");
     std::fs::create_dir_all(&roles).unwrap();
     std::fs::create_dir_all(&personas).unwrap();
     std::fs::write(roles.join("probe.toml"), "description = \"Project role\"").unwrap();
