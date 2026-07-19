@@ -3168,6 +3168,24 @@ pub fn resolve_model_list(
                 if entry.info.api_backend == ApiBackend::default() {
                     entry.info.api_backend.clone_from(&donor.info.api_backend);
                 }
+                // The server list may omit effort metadata entirely (Kimi's
+                // /v1/models does); inherit from the bundled default so a
+                // catalog refresh can't silently disable effort switching.
+                if !entry.info.supports_reasoning_effort && donor.info.supports_reasoning_effort
+                {
+                    entry.info.supports_reasoning_effort = true;
+                }
+                if entry.info.reasoning_efforts.is_empty()
+                    && !donor.info.reasoning_efforts.is_empty()
+                {
+                    entry
+                        .info
+                        .reasoning_efforts
+                        .clone_from(&donor.info.reasoning_efforts);
+                }
+                if entry.info.reasoning_effort.is_none() {
+                    entry.info.reasoning_effort = donor.info.reasoning_effort;
+                }
             }
             if resolved.contains_key(key) {
                 tracing::debug!(
@@ -10925,6 +10943,63 @@ default = "grok-4.5"
                 );
             }
         }
+    }
+    #[test]
+    fn resolve_model_list_inherits_reasoning_effort_from_default_when_prefetched_omits_it() {
+        // Kimi's /v1/models omits effort metadata entirely; the bundled default
+        // for the same key must donate it, or /effort silently breaks after a
+        // catalog refresh.
+        let cfg = Config::default();
+        let dm = crate::models::default_model();
+        let default_cw = DEFAULT_CONTEXT_WINDOW;
+        let entry = prefetch_model_entry(dm, default_cw, ApiBackend::default());
+        let mut prefetched = IndexMap::new();
+        prefetched.insert(dm.to_owned(), entry);
+        let resolved = resolve_model_list(&cfg, Some(prefetched));
+        let entry = resolved.get(dm).expect("model must exist");
+        let defaults = default_model_entries(&EndpointsConfig::default());
+        let default = defaults.get(dm).expect("default model must be bundled");
+        assert_eq!(
+            entry.info.supports_reasoning_effort, default.info.supports_reasoning_effort,
+            "supports_reasoning_effort should be inherited from default"
+        );
+        assert_eq!(
+            entry.info.reasoning_effort, default.info.reasoning_effort,
+            "reasoning_effort default should be inherited from default"
+        );
+        assert_eq!(
+            entry.info.reasoning_efforts, default.info.reasoning_efforts,
+            "reasoning_efforts menu should be inherited from default"
+        );
+        assert!(
+            default.info.supports_reasoning_effort,
+            "test premise: bundled default model supports effort"
+        );
+    }
+    #[test]
+    fn resolve_model_list_prefetch_effort_fields_beat_default() {
+        // A prefetched entry that carries its own effort metadata keeps it —
+        // inheritance is a fallback for omitted fields, not an override.
+        let cfg = Config::default();
+        let dm = crate::models::default_model();
+        let default_cw = DEFAULT_CONTEXT_WINDOW;
+        let mut entry = prefetch_model_entry(dm, default_cw, ApiBackend::default());
+        entry.info.supports_reasoning_effort = true;
+        entry.info.reasoning_effort = Some(ReasoningEffort::Low);
+        entry.info.reasoning_efforts = vec![ReasoningEffortOption {
+            id: "low".to_string(),
+            value: ReasoningEffort::Low,
+            label: "Low".to_string(),
+            description: None,
+            default: true,
+        }];
+        let mut prefetched = IndexMap::new();
+        prefetched.insert(dm.to_owned(), entry);
+        let resolved = resolve_model_list(&cfg, Some(prefetched));
+        let entry = resolved.get(dm).expect("model must exist");
+        assert_eq!(entry.info.reasoning_effort, Some(ReasoningEffort::Low));
+        assert_eq!(entry.info.reasoning_efforts.len(), 1);
+        assert_eq!(entry.info.reasoning_efforts[0].id, "low");
     }
     #[test]
     fn hub_config_default_has_no_url() {
