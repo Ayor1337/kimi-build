@@ -56,7 +56,7 @@ const CLAUDE_DEFAULT_SKILLS: &[&str] = &["pdf", "docx", "xlsx", "pptx", "skill-c
 /// matching vendor's config dir (`/.cursor/` or `/.claude/`).
 ///
 /// The path check ensures a user's own skill that merely shares a denylisted
-/// name (e.g. `~/.grok/skills/shell`) is NOT dropped — only skills physically
+/// name (e.g. `~/.kami/skills/shell`) is NOT dropped — only skills physically
 /// located under the vendor dir are treated as vendor builtins.
 fn is_vendor_default_skill(path: &str, name: &str) -> bool {
     let in_cursor = path.contains("/.cursor/") || path.contains("\\.cursor\\");
@@ -851,7 +851,7 @@ pub fn discover_skills_for_paths(
 ) -> Vec<SkillInfo> {
     // `.grok` and `.agents` are always scanned; `.claude` is gated on the
     // claude-vendor skills cell. (`.cursor` is excluded here by design — see fn docs.)
-    let mut config_dir_names: Vec<&str> = vec![".grok", ".agents"];
+    let mut config_dir_names: Vec<&str> = vec![".kami", ".agents"];
     if compat.claude.skills {
         config_dir_names.push(".claude");
     }
@@ -1431,9 +1431,9 @@ model: test-model
 
     #[test]
     fn is_vendor_default_skill_spares_user_skill_outside_vendor_dir() {
-        // A user's own "shell" skill in ~/.grok is NOT a vendor builtin.
+        // A user's own "shell" skill in ~/.kami is NOT a vendor builtin.
         assert!(!is_vendor_default_skill(
-            "/home/u/.grok/skills/shell/SKILL.md",
+            "/home/u/.kami/skills/shell/SKILL.md",
             "shell"
         ));
     }
@@ -1466,8 +1466,8 @@ model: test-model
             "---\nname: shell\ndescription: cursor builtin\n---\n",
         )
         .unwrap();
-        // Same name under /.grok/ → kept (user content).
-        let grok_shell = tmp.path().join(".grok").join("skills").join("shell");
+        // Same name under /.kami/ → kept (user content).
+        let grok_shell = tmp.path().join(".kami").join("skills").join("shell");
         std::fs::create_dir_all(&grok_shell).unwrap();
         std::fs::write(
             grok_shell.join("SKILL.md"),
@@ -1480,7 +1480,7 @@ model: test-model
             (grok_shell.join("SKILL.md"), SkillScope::User),
         ]);
         assert_eq!(skills.len(), 1, "cursor builtin must be dropped");
-        assert!(skills[0].path.contains("/.grok/"));
+        assert!(skills[0].path.contains("/.kami/"));
     }
 
     #[test]
@@ -1523,7 +1523,7 @@ model: test-model
             "---\nname: claude-dyn\n---\n",
         )
         .unwrap();
-        let grok_skill = sub.join(".grok").join("skills").join("grok-dyn");
+        let grok_skill = sub.join(".kami").join("skills").join("grok-dyn");
         std::fs::create_dir_all(&grok_skill).unwrap();
         std::fs::write(grok_skill.join("SKILL.md"), "---\nname: grok-dyn\n---\n").unwrap();
 

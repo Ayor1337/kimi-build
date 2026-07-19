@@ -135,7 +135,7 @@ fn load_config(path: Option<&std::path::Path>) -> VoiceConfig {
         std::env::var("HOME")
             .map(PathBuf::from)
             .unwrap_or_default()
-            .join(".grok/config.toml"),
+            .join(".kami/config.toml"),
     ) && let Ok(table) = toml::from_str::<toml::Table>(&raw)
     {
         return VoiceConfig::from_config_table(&table, env_base.as_deref());
@@ -154,7 +154,7 @@ Environment:
   XAI_API_KEY     required
   RUST_LOG        optional (default info,xai_grok_voice=debug)
 
-Reads [voice] from ~/.grok/config.toml unless --config PATH is set.
+Reads [voice] from ~/.kami/config.toml unless --config PATH is set.
 "#
     );
 }

@@ -552,19 +552,22 @@ fn parse_esc_ttl(raw: Option<String>) -> Duration {
 pub(crate) const TIER_RESTRICTED_COMMANDS: &[&str] =
     &["usage", "imagine", "imagine-video", "voice"];
 /// Whether a subscription-tier display name is a tier with restricted
-/// commands: the free tier (no subscription ⇒ `None`, or an explicit
-/// "Free") and X Basic (CCP display name "X Basic"; JWT claim fallback
-/// "x_basic"). Everything else — paid tiers and unknown future names —
-/// is unrestricted (fail-open).
+/// commands: the free tier (an explicit "Free") and X Basic (CCP display name
+/// "X Basic"; JWT claim fallback "x_basic"). Everything else — paid tiers,
+/// unknown future names, and an absent tier — is unrestricted (fail-open).
 ///
 /// The string classification is shared with the shell's capability
 /// (toolset) gate via [`xai_grok_shell::tier::is_restricted_tier_name`] so
-/// the two can't drift. The pager's *cosmetic* slash-command gate treats an
-/// absent tier (`None`) as restricted (it recovers live on the next settings
-/// update); the shell's capability gate treats absence as unrestricted.
+/// the two can't drift.
+///
+/// Note: an absent tier (`None`) is NOT treated as restricted. The
+/// first-party provider (Kimi) has no remote-settings/tier endpoint, so the
+/// tier is always absent for Kimi logins — treating absence as "free" would
+/// hide `/usage` (and friends) forever, even though the provider enforces
+/// quota server-side.
 fn is_restricted_tier(tier: Option<&str>) -> bool {
     match tier {
-        None => true,
+        None => false,
         Some(t) => xai_grok_shell::tier::is_restricted_tier_name(t),
     }
 }
@@ -635,7 +638,7 @@ pub struct AppView {
     pub scroll_state: MouseScrollState,
     /// Scroll config derived from terminal detection.
     pub scroll_config: ScrollConfig,
-    /// Current appearance config (hot-reloadable from ~/.grok/pager.toml).
+    /// Current appearance config (hot-reloadable from ~/.kami/pager.toml).
     /// Stored here so new agents inherit the current config.
     pub appearance: AppearanceConfig,
     /// Notification service (terminal bell, OSC sequences, title updates).
@@ -1108,7 +1111,7 @@ pub struct AppView {
     pub dashboard_return: Option<DashboardReturn>,
     /// Persisted dashboard configuration (pinned rows, reorderings,
     /// grouping). Loaded once on startup from
-    /// `~/.grok/config.toml`. `None` when the file/section is absent
+    /// `~/.kami/config.toml`. `None` when the file/section is absent
     /// or contained malformed data — falls back to in-memory defaults.
     pub dashboard_persisted: Option<crate::views::dashboard::PersistedDashboard>,
     /// Per-platform key event normalizer.
@@ -6613,12 +6616,26 @@ pub(crate) mod tests {
     fn apply_auth_meta_restricts_usage_for_free_tier() {
         let mut app = test_app();
         advertise_media_tools(&mut app);
-        app.apply_auth_meta(&xai_grok_shell::auth::AuthMeta::default());
+        app.apply_auth_meta(&xai_grok_shell::auth::AuthMeta {
+            subscription_tier: Some("Free".into()),
+            ..Default::default()
+        });
         assert_eq!(
             app.tier_restricted_commands,
             expected_tier_restricted_commands()
         );
         assert_tier_restricted_commands_absent(&app);
+        assert!(app.usage_visible);
+    }
+    #[test]
+    fn apply_auth_meta_absent_tier_is_unrestricted() {
+        // The first-party provider (Kimi) has no tier endpoint, so the tier
+        // is always absent for Kimi logins; `/usage` must stay available.
+        let mut app = test_app();
+        advertise_media_tools(&mut app);
+        app.apply_auth_meta(&xai_grok_shell::auth::AuthMeta::default());
+        assert!(app.tier_restricted_commands.is_empty());
+        assert_tier_restricted_commands_present(&app);
         assert!(app.usage_visible);
     }
     #[test]
@@ -6649,7 +6666,10 @@ pub(crate) mod tests {
         assert_tier_restricted_commands_present(&app);
         let mut app = test_app();
         advertise_media_tools(&mut app);
-        app.apply_auth_meta(&xai_grok_shell::auth::AuthMeta::default());
+        app.apply_auth_meta(&xai_grok_shell::auth::AuthMeta {
+            subscription_tier: Some("Free".into()),
+            ..Default::default()
+        });
         assert!(!app.tier_restricted_commands.is_empty());
         app.subscription_tier = Some("SuperGrok".into());
         app.apply_tier_restrictions();
@@ -6666,7 +6686,9 @@ pub(crate) mod tests {
     }
     #[test]
     fn is_restricted_tier_classification() {
-        assert!(is_restricted_tier(None));
+        // Absent tier is unrestricted: the first-party provider (Kimi) has no
+        // tier endpoint, so gating on absence would hide `/usage` forever.
+        assert!(!is_restricted_tier(None));
         assert!(is_restricted_tier(Some("")));
         assert!(is_restricted_tier(Some("Free")));
         assert!(is_restricted_tier(Some("X Basic")));
@@ -6684,7 +6706,10 @@ pub(crate) mod tests {
     #[test]
     fn is_voice_tier_restricted_tracks_tier() {
         let mut app = test_app();
-        app.apply_auth_meta(&xai_grok_shell::auth::AuthMeta::default());
+        app.apply_auth_meta(&xai_grok_shell::auth::AuthMeta {
+            subscription_tier: Some("Free".into()),
+            ..Default::default()
+        });
         assert!(app.is_voice_tier_restricted());
         let mut app = test_app();
         let meta = xai_grok_shell::auth::AuthMeta {

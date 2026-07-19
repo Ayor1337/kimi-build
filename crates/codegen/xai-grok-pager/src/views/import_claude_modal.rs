@@ -714,7 +714,7 @@ fn build_rows(
     if !plan.global_items.is_empty() {
         let scope_start = flat_index;
         let scope_key = format!("scope:{:?}", Scope::Global);
-        let label = "Global  ~/.grok/config.toml".to_string();
+        let label = "Global  ~/.kami/config.toml".to_string();
         // Placeholder header; flat_indices filled after children are pushed.
         let scope_header_pos = rows.len();
         rows.push(Row::ScopeHeader {
@@ -741,7 +741,7 @@ fn build_rows(
     if !plan.project_items.is_empty() {
         let scope_start = flat_index;
         let scope_key = format!("scope:{:?}", Scope::Project);
-        let project_config = find_project_root(cwd).join(".grok").join("config.toml");
+        let project_config = find_project_root(cwd).join(".kami").join("config.toml");
         let label = format!("Project  {}", project_config.display());
         let scope_header_pos = rows.len();
         rows.push(Row::ScopeHeader {

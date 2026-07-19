@@ -1365,6 +1365,7 @@ pub(super) fn credit_balance_from_config(
         prepaid_balance_cents: c.prepaid_balance.map(|v| v.val),
         period_type,
         is_unified_billing_user: c.is_unified_billing_user,
+        quota_rows: c.quota_rows,
     }
 }
 /// Whether the balance carries a non-zero prepaid credit balance (signed cents).
@@ -1421,7 +1422,7 @@ pub(super) fn parse_auto_topup_response(
         Err(_) => AutoTopupFetch::Unchanged,
     }
 }
-/// A blocking flock on the shared, possibly-network `~/.grok` lock must never
+/// A blocking flock on the shared, possibly-network `~/.kami` lock must never
 /// stall the event-loop thread (and would hang exit on `/quit`); the registry
 /// is best-effort, so skip on contention.
 pub(super) fn unregister_active_session_best_effort(session_id: &acp::SessionId) {

@@ -52,7 +52,7 @@ pub(crate) fn subagent_template() -> Zeroizing<String> {
 }
 
 /// The compact system prompt used after conversation compaction.
-pub const COMPACT_SYSTEM_PROMPT: &str = "You are an AI coding agent. You operate in a workspace with a provided codebase.\n\n\
+pub const COMPACT_SYSTEM_PROMPT: &str = "You are Kimi, an AI coding agent released by MoonshotAI. You operate in a workspace with a provided codebase.\n\n\
      Your main goal is to complete the user's request, denoted within the <user_query> tag.";
 
 #[cfg(test)]
@@ -375,7 +375,7 @@ mod tests {
     fn test_compact_prompt_matches_expected() {
         assert_eq!(
             COMPACT_SYSTEM_PROMPT,
-            "You are an AI coding agent. You operate in a workspace with a provided codebase.\n\n\
+            "You are Kimi, an AI coding agent released by MoonshotAI. You operate in a workspace with a provided codebase.\n\n\
              Your main goal is to complete the user's request, denoted within the <user_query> tag.",
         );
     }

@@ -498,7 +498,7 @@ mod tests {
         assert!(result.contains("embedded content"));
         assert!(
             result.starts_with("<user_query>"),
-            "Grok should start with <user_query>, got: {result}"
+            "Kimi should start with <user_query>, got: {result}"
         );
     }
     #[test]

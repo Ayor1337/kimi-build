@@ -10,21 +10,10 @@ fn default_oidc_scopes() -> Vec<String> {
         "api:access".into(),
     ]
 }
-/// Default scopes for the xAI OAuth2 provider. Includes `grok-cli:access`
-/// which authorizes the token for API proxy requests.
+/// Default scopes for the Kimi OAuth2 provider. Kimi's device flow accepts no
+/// scope parameter, so the default set is empty.
 fn default_oauth2_scopes() -> Vec<String> {
-    vec![
-        "openid".into(),
-        "profile".into(),
-        "email".into(),
-        "offline_access".into(),
-        "grok-cli:access".into(),
-        "api:access".into(),
-        "conversations:read".into(),
-        "conversations:write".into(),
-        "workspaces:read".into(),
-        "workspaces:write".into(),
-    ]
+    vec![]
 }
 fn default_team_oauth2_scopes() -> Vec<String> {
     vec![
@@ -129,7 +118,7 @@ pub struct OAuth2ProviderConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub referrer: Option<String>,
 }
-pub const XAI_OAUTH2_ISSUER: &str = "https://auth.x.ai";
+pub const XAI_OAUTH2_ISSUER: &str = "https://auth.kimi.com";
 /// Production accounts-app origin allowlist — the only origins builds without
 /// non-production builds accept. Lives in its own const, referenced by both
 /// profiles below, so the frozen-contract test (monorepo CI compiles with
@@ -173,7 +162,7 @@ pub fn use_local_auth() -> bool {
         .map(|v| !v.is_empty() && v != "0")
         .unwrap_or(false)
 }
-/// Returns the active xAI OAuth2 issuer — the local-dev issuer when
+/// Returns the active first-party OAuth2 issuer — the local-dev issuer when
 /// `GROK_LOCAL_AUTH=1` is set, otherwise the production issuer.
 pub fn xai_oauth2_issuer() -> &'static str {
     if use_local_auth() {
@@ -182,10 +171,10 @@ pub fn xai_oauth2_issuer() -> &'static str {
         XAI_OAUTH2_ISSUER
     }
 }
-/// Returns `true` if `issuer` is a recognised xAI OAuth2 issuer
+/// Returns `true` if `issuer` is a recognised first-party OAuth2 issuer
 /// (production **or** local-dev). Use this instead of comparing against
 /// [`XAI_OAUTH2_ISSUER`] directly so that local-dev sessions are still
-/// treated as first-party xAI auth.
+/// treated as first-party auth.
 pub fn is_xai_oauth2_issuer(issuer: &str) -> bool {
     issuer == XAI_OAUTH2_ISSUER || issuer == XAI_OAUTH2_LOCAL_ISSUER
 }
@@ -276,7 +265,7 @@ impl Default for GrokComConfig {
             Some(
                 OAuth2ProviderConfig::from_env().unwrap_or_else(|| OAuth2ProviderConfig {
                     issuer: xai_oauth2_issuer().to_owned(),
-                    client_id: obfstr::obfstr!("b1a00492-073a-47ea-816f-4c329264a828").to_owned(),
+                    client_id: obfstr::obfstr!("17e5f671-d194-4dfb-9706-5516cb48c098").to_owned(),
                     scopes: default_oauth2_scopes(),
                     principal_type: None,
                     principal_id: None,
@@ -385,28 +374,13 @@ mod tests {
         assert_eq!(PROD_ACCOUNTS_APP_ORIGINS, &["https://accounts.x.ai"]);
         assert_eq!(allowed_accounts_app_origins(), PROD_ACCOUNTS_APP_ORIGINS);
     }
-    /// FROZEN client contract: the 10 scopes the xAI OAuth2 client requests.
-    /// The server must keep accepting all of them; existing tokens carry
-    /// exactly this set. Frozen OAuth client scope contract.
+    /// FROZEN client contract: the Kimi OAuth2 device flow accepts no scope
+    /// parameter, so the client requests an empty scope set.
     #[test]
     fn default_oauth2_scopes_are_frozen() {
         let scopes = default_oauth2_scopes();
         let scopes: Vec<&str> = scopes.iter().map(String::as_str).collect();
-        assert_eq!(
-            scopes,
-            [
-                "openid",
-                "profile",
-                "email",
-                "offline_access",
-                "grok-cli:access",
-                "api:access",
-                "conversations:read",
-                "conversations:write",
-                "workspaces:read",
-                "workspaces:write",
-            ]
-        );
+        assert_eq!(scopes, Vec::<&str>::new());
     }
     #[test]
     fn preferred_method_deserializes_from_toml() {

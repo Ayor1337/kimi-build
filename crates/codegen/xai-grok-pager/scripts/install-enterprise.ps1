@@ -4,7 +4,7 @@
 # Standalone installer for the enterprise channel. Intentionally a full copy of
 # the install logic so changes to the stable installer cannot break enterprise.
 #
-# Auth: GROK_DEPLOYMENT_KEY env var (takes precedence) or ~/.grok/auth.json from `grok login`.
+# Auth: GROK_DEPLOYMENT_KEY env var (takes precedence) or ~/.kami/auth.json from `grok login`.
 # Env: GROK_BIN_DIR, GROK_PROXY_URL
 #
 # Usage:
@@ -125,10 +125,10 @@ if ($env:GROK_DEPLOYMENT_KEY) {
     $legacyToken = Read-GrokToken $LegacyScope
     if ($oidcToken) {
         $AuthSource = 'auth.json (oidc)'
-        Write-Host 'Auth: using OIDC token from ~/.grok/auth.json.' -ForegroundColor DarkGray
+        Write-Host 'Auth: using OIDC token from ~/.kami/auth.json.' -ForegroundColor DarkGray
     } elseif ($legacyToken) {
         $AuthSource = 'auth.json (legacy)'
-        Write-Host 'Auth: using legacy token from ~/.grok/auth.json.' -ForegroundColor DarkGray
+        Write-Host 'Auth: using legacy token from ~/.kami/auth.json.' -ForegroundColor DarkGray
     }
 }
 

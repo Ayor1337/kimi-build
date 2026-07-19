@@ -4,7 +4,7 @@
 //!
 //! The marker is **unsigned** and user-writable — a refresh hint, not a tamper
 //! control; real tamper resistance is [`crate::signed_policy`] plus the
-//! OS-protected layers (root-owned `/etc/grok`, MDM).
+//! OS-protected layers (root-owned `/etc/kami`, MDM).
 
 use std::path::Path;
 

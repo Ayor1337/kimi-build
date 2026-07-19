@@ -43,9 +43,9 @@ pub fn default_agent_type() -> String {
     DEFAULT_AGENT_TYPE.to_owned()
 }
 /// Default base URL for the cli chat proxy.
-pub const CLI_CHAT_PROXY_BASE_URL_DEFAULT: &str = "https://cli-chat-proxy.grok.com/v1";
-/// Default base URL for the public xAI API.
-pub const XAI_API_BASE_URL_DEFAULT: &str = "https://api.x.ai/v1";
+pub const CLI_CHAT_PROXY_BASE_URL_DEFAULT: &str = "https://api.kimi.com/coding/v1";
+/// Default base URL for the public Kimi API (BYOK / API-key auth).
+pub const XAI_API_BASE_URL_DEFAULT: &str = "https://api.moonshot.ai/v1";
 /// Default base URL for the asset server (profile images, etc.).
 pub const ASSET_SERVER_URL_DEFAULT: &str = "https://assets.grok.com";
 /// One or more environment variable names that may hold a model API key.
@@ -1233,7 +1233,7 @@ pub struct StorageConfig {
 /// `[paths]` configuration: extra directories to scan for skills, rules, etc.
 ///
 /// These supplement the built-in scan locations (`.grok/skills/`,
-/// `.agents/skills/`, `~/.grok/skills/`). They're written by `/import-claude`
+/// `.agents/skills/`, `~/.kami/skills/`). They're written by `/import-claude`
 /// to preserve previously-discovered Claude directories after the runtime
 /// `.claude/` cutoff (see `[claude_compat] imported`).
 ///
@@ -1614,7 +1614,7 @@ pub use xai_grok_shared::ui_config::{ContextualHints, UiConfig};
 ///
 /// ```toml
 /// [agent]
-/// # Use a named agent (looked up via discovery: .grok/agents/, ~/.grok/agents/, built-ins)
+/// # Use a named agent (looked up via discovery: .grok/agents/, ~/.kami/agents/, built-ins)
 /// name = "my-custom-agent"
 ///
 /// # OR: path to an agent definition file (.md with YAML frontmatter)
@@ -1637,7 +1637,7 @@ pub struct AgentSelectionConfig {
     pub name: Option<String>,
     /// Path to an agent definition file (.md with YAML frontmatter).
     /// When set, the agent is loaded from this file.
-    /// Supports environment variable expansion (e.g., `$HOME/.grok/agents/my-agent.md`).
+    /// Supports environment variable expansion (e.g., `$HOME/.kami/agents/my-agent.md`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub definition: Option<PathBuf>,
     /// Global system-prompt identity label. Per-model override wins.
@@ -2625,10 +2625,10 @@ impl Config {
             .default(true)
             .resolve()
     }
-    /// Resolve whether to use grok's default OAuth2 (xAI auth.x.ai).
+    /// Resolve whether to use grok's default OAuth2 (Kimi auth.kimi.com).
     ///
     /// Enterprise OIDC (`oidc` in config.toml) always wins — this only gates
-    /// the default xAI OAuth2 fallback when no enterprise OIDC is configured.
+    /// the default Kimi OAuth2 fallback when no enterprise OIDC is configured.
     ///
     /// Priority: `--oauth` > GROK_OAUTH_ENABLED env > default (true = OAuth).
     pub fn resolve_grok_oauth(&self, cli_oidc: Option<bool>) -> Resolved<bool> {
@@ -2680,7 +2680,7 @@ impl Config {
         resolve_mcp_push_server_status(None, None, self.features.mcp_push_server_status, None, None)
     }
     /// Resolve whether the leader's `ConfigFileWatcher` adds the two
-    /// narrow non-recursive watches for `<cwd>/` and `<cwd>/.grok/`.
+    /// narrow non-recursive watches for `<cwd>/` and `<cwd>/.kami/`.
     ///
     /// Thin delegate to the canonical
     /// [`resolve_mcp_recursive_config_watch`] free function — mirrors
@@ -2962,7 +2962,7 @@ fn error_reporting_enabled_from_toml(root: &toml::Value) -> Option<bool> {
 fn grok_telemetry_env_enabled() -> Option<bool> {
     env_telemetry_mode("GROK_TELEMETRY_ENABLED").map(|m| !m.is_disabled())
 }
-/// Load `~/.grok/requirements.toml` standalone so the admin pin can beat
+/// Load `~/.kami/requirements.toml` standalone so the admin pin can beat
 /// env vars. The merged config layer can't express that — last-merge-wins
 /// loses provenance.
 pub(crate) fn read_requirements_toml() -> Option<toml::Value> {
@@ -3167,6 +3167,24 @@ pub fn resolve_model_list(
                 }
                 if entry.info.api_backend == ApiBackend::default() {
                     entry.info.api_backend.clone_from(&donor.info.api_backend);
+                }
+                // The server list may omit effort metadata entirely (Kimi's
+                // /v1/models does); inherit from the bundled default so a
+                // catalog refresh can't silently disable effort switching.
+                if !entry.info.supports_reasoning_effort && donor.info.supports_reasoning_effort
+                {
+                    entry.info.supports_reasoning_effort = true;
+                }
+                if entry.info.reasoning_efforts.is_empty()
+                    && !donor.info.reasoning_efforts.is_empty()
+                {
+                    entry
+                        .info
+                        .reasoning_efforts
+                        .clone_from(&donor.info.reasoning_efforts);
+                }
+                if entry.info.reasoning_effort.is_none() {
+                    entry.info.reasoning_effort = donor.info.reasoning_effort;
                 }
             }
             if resolved.contains_key(key) {
@@ -4253,17 +4271,17 @@ pub struct Features {
     ///
     /// Practical consequence: setting
     /// `[features] mcp_push_server_status = false` in
-    /// `~/.grok/config.toml` will NOT disable the pager's
+    /// `~/.kami/config.toml` will NOT disable the pager's
     /// subscription on a freshly-launched process. To disable the
     /// pager subscription, set `GROK_MCP_PUSH_SERVER_STATUS=0` in
     /// the env before launch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mcp_push_server_status: Option<bool>,
     /// Whether the leader's `ConfigFileWatcher` adds the two narrow
-    /// non-recursive watches for `<cwd>/` and `<cwd>/.grok/`.
+    /// non-recursive watches for `<cwd>/` and `<cwd>/.kami/`.
     ///
     /// When `true` (default), edits to `<cwd>/.mcp.json`,
-    /// `<cwd>/.grok/config.toml`, or `<cwd>/.claude.json` flow
+    /// `<cwd>/.kami/config.toml`, or `<cwd>/.claude.json` flow
     /// through the watcher → reloader → `ConfigUpdate::
     /// ProjectMcpServersChanged { cwd }` → `app.rs` ACP-injection
     /// pipeline and the affected sessions reload their MCP servers
@@ -10925,6 +10943,63 @@ default = "grok-4.5"
                 );
             }
         }
+    }
+    #[test]
+    fn resolve_model_list_inherits_reasoning_effort_from_default_when_prefetched_omits_it() {
+        // Kimi's /v1/models omits effort metadata entirely; the bundled default
+        // for the same key must donate it, or /effort silently breaks after a
+        // catalog refresh.
+        let cfg = Config::default();
+        let dm = crate::models::default_model();
+        let default_cw = DEFAULT_CONTEXT_WINDOW;
+        let entry = prefetch_model_entry(dm, default_cw, ApiBackend::default());
+        let mut prefetched = IndexMap::new();
+        prefetched.insert(dm.to_owned(), entry);
+        let resolved = resolve_model_list(&cfg, Some(prefetched));
+        let entry = resolved.get(dm).expect("model must exist");
+        let defaults = default_model_entries(&EndpointsConfig::default());
+        let default = defaults.get(dm).expect("default model must be bundled");
+        assert_eq!(
+            entry.info.supports_reasoning_effort, default.info.supports_reasoning_effort,
+            "supports_reasoning_effort should be inherited from default"
+        );
+        assert_eq!(
+            entry.info.reasoning_effort, default.info.reasoning_effort,
+            "reasoning_effort default should be inherited from default"
+        );
+        assert_eq!(
+            entry.info.reasoning_efforts, default.info.reasoning_efforts,
+            "reasoning_efforts menu should be inherited from default"
+        );
+        assert!(
+            default.info.supports_reasoning_effort,
+            "test premise: bundled default model supports effort"
+        );
+    }
+    #[test]
+    fn resolve_model_list_prefetch_effort_fields_beat_default() {
+        // A prefetched entry that carries its own effort metadata keeps it —
+        // inheritance is a fallback for omitted fields, not an override.
+        let cfg = Config::default();
+        let dm = crate::models::default_model();
+        let default_cw = DEFAULT_CONTEXT_WINDOW;
+        let mut entry = prefetch_model_entry(dm, default_cw, ApiBackend::default());
+        entry.info.supports_reasoning_effort = true;
+        entry.info.reasoning_effort = Some(ReasoningEffort::Low);
+        entry.info.reasoning_efforts = vec![ReasoningEffortOption {
+            id: "low".to_string(),
+            value: ReasoningEffort::Low,
+            label: "Low".to_string(),
+            description: None,
+            default: true,
+        }];
+        let mut prefetched = IndexMap::new();
+        prefetched.insert(dm.to_owned(), entry);
+        let resolved = resolve_model_list(&cfg, Some(prefetched));
+        let entry = resolved.get(dm).expect("model must exist");
+        assert_eq!(entry.info.reasoning_effort, Some(ReasoningEffort::Low));
+        assert_eq!(entry.info.reasoning_efforts.len(), 1);
+        assert_eq!(entry.info.reasoning_efforts[0].id, "low");
     }
     #[test]
     fn hub_config_default_has_no_url() {

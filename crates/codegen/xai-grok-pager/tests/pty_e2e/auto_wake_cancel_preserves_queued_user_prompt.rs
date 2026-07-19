@@ -269,7 +269,7 @@ async fn auto_wake_cancel_preserves_queued_user_prompt() {
 
 #[cfg(unix)]
 fn unified_log_diagnostics(content: &ContentController) -> String {
-    let path = content.home().join(".grok/logs/unified.jsonl");
+    let path = content.home().join(".kami/logs/unified.jsonl");
     let log = std::fs::read_to_string(path).unwrap_or_default();
     let mut tail: Vec<&str> = log.lines().rev().take(80).collect();
     tail.reverse();

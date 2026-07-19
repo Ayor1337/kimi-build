@@ -870,9 +870,9 @@ fn default_prompt_mode() -> PromptMode {
 pub enum AgentScope {
     /// .grok/agents/ (project-level, highest priority)
     Project,
-    /// ~/.grok/agents/ (user-level)
+    /// ~/.kami/agents/ (user-level)
     User,
-    /// ~/.grok/bundled/agents/ (lowest-priority bundled cache)
+    /// ~/.kami/bundled/agents/ (lowest-priority bundled cache)
     Bundled,
     /// Built-in agent (e.g., default_grok_build(), browser_use()).
     #[default]
@@ -1068,11 +1068,11 @@ const _: () = assert!(AgentColor::VALID_VALUES.len() == <AgentColor as strum::En
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum MemoryScope {
-    /// `~/.grok/agent-memory/<name>/`
+    /// `~/.kami/agent-memory/<name>/`
     User,
-    /// `<project>/.grok/agent-memory/<name>/`
+    /// `<project>/.kami/agent-memory/<name>/`
     Project,
-    /// `<project>/.grok/agent-memory-local/<name>/`
+    /// `<project>/.kami/agent-memory-local/<name>/`
     Local,
 }
 impl MemoryScope {
@@ -1095,12 +1095,12 @@ impl MemoryScope {
                 is_project_scoped: false,
             },
             Self::Project => ResolvedMemoryDir {
-                path: project_cwd.join(".grok/agent-memory").join(agent_name),
+                path: project_cwd.join(".kami/agent-memory").join(agent_name),
                 is_project_scoped: true,
             },
             Self::Local => ResolvedMemoryDir {
                 path: project_cwd
-                    .join(".grok/agent-memory-local")
+                    .join(".kami/agent-memory-local")
                     .join(agent_name),
                 is_project_scoped: true,
             },
@@ -1316,11 +1316,11 @@ impl AgentDefinition {
                 return scope;
             }
         }
-        if path_str.contains(".grok/agents/") || path_str.contains(".grok\\agents\\") {
+        if path_str.contains(".kami/agents/") || path_str.contains(".kami\\agents\\") {
             return AgentScope::Project;
         }
-        if path_str.contains(".grok/bundled/agents/")
-            || path_str.contains(".grok\\bundled\\agents\\")
+        if path_str.contains(".kami/bundled/agents/")
+            || path_str.contains(".kami\\bundled\\agents\\")
         {
             return AgentScope::Bundled;
         }
@@ -1461,7 +1461,7 @@ impl AgentDefinition {
     pub fn default_grok_build() -> Self {
         Self::base(
             BuiltinAgentName::GrokBuild,
-            "Grok Build agent for software engineering tasks.",
+            "Kimi Build agent for software engineering tasks.",
         )
     }
     /// Grok Build Concise agent definition — concise output format for SFT/RL.
@@ -1471,17 +1471,17 @@ impl AgentDefinition {
             agents_md: false,
             ..Self::base(
                 BuiltinAgentName::GrokBuildConcise,
-                "Grok Build agent with concise output format.",
+                "Kimi Build agent with concise output format.",
             )
         }
     }
-    /// Grok Build agent with plan mode tools.
+    /// Kimi Build agent with plan mode tools.
     pub fn grok_build_plan() -> Self {
         Self {
             tool_config: grok_build_plan_toolset(),
             ..Self::base(
                 BuiltinAgentName::GrokBuildPlan,
-                "Grok Build agent with plan mode support.",
+                "Kimi Build agent with plan mode support.",
             )
         }
     }
@@ -1491,17 +1491,17 @@ impl AgentDefinition {
             tool_config: grok_build_plan_no_subagents_toolset(),
             ..Self::base(
                 BuiltinAgentName::GrokBuildPlanNoSubagents,
-                "Grok Build agent with plan mode (no subagents).",
+                "Kimi Build agent with plan mode (no subagents).",
             )
         }
     }
-    /// Default Grok Build agent with the `ask_user_question` tool.
+    /// Default Kimi Build agent with the `ask_user_question` tool.
     pub fn grok_build_ask_user() -> Self {
         Self {
             tool_config: grok_build_ask_user_toolset(),
             ..Self::base(
                 BuiltinAgentName::GrokBuildAskUser,
-                "Grok Build agent with ask-user-question tool.",
+                "Kimi Build agent with ask-user-question tool.",
             )
         }
     }
@@ -2043,13 +2043,13 @@ description: Minimal agent
         let proj = MemoryScope::Project.resolve_dir("a", cwd);
         assert_eq!(
             proj.path,
-            std::path::PathBuf::from("/project/.grok/agent-memory/a")
+            std::path::PathBuf::from("/project/.kami/agent-memory/a")
         );
         assert!(proj.is_project_scoped);
         let local = MemoryScope::Local.resolve_dir("a", cwd);
         assert_eq!(
             local.path,
-            std::path::PathBuf::from("/project/.grok/agent-memory-local/a")
+            std::path::PathBuf::from("/project/.kami/agent-memory-local/a")
         );
         assert!(local.is_project_scoped);
     }
@@ -2231,7 +2231,7 @@ description: Test default tool config
         let bundled = tmp
             .path()
             .join("nested")
-            .join(".grok")
+            .join(".kami")
             .join("bundled")
             .join("agents")
             .join("bundled-agent.md");

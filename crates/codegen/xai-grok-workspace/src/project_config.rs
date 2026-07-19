@@ -61,8 +61,8 @@ fn is_user_grok_config_file(config_path: &Path) -> bool {
 /// Returns paths ordered from repo root (lowest priority) to cwd (highest priority),
 /// matching the convention used by skills and AGENTS.md discovery.
 ///
-/// If no git repo is found, only checks `cwd/.grok/config.toml`. Excludes the
-/// user-global config so `cwd == $HOME` does not treat `~/.grok/config.toml` as
+/// If no git repo is found, only checks `cwd/.kami/config.toml`. Excludes the
+/// user-global config so `cwd == $HOME` does not treat `~/.kami/config.toml` as
 /// a project overlay.
 pub fn find_project_configs(cwd: &Path) -> Vec<PathBuf> {
     find_project_configs_in(&RepoDirChain::resolve(cwd).dirs)
@@ -70,7 +70,7 @@ pub fn find_project_configs(cwd: &Path) -> Vec<PathBuf> {
 
 /// [`find_project_configs`] over a precomputed cwd→git-root dir chain
 /// ([`RepoDirChain`]), repo-root-first. Excludes the user-global config so
-/// `cwd == $HOME` does not treat `~/.grok/config.toml` as a project overlay.
+/// `cwd == $HOME` does not treat `~/.kami/config.toml` as a project overlay.
 /// `pub(crate)` — the gate (`repo_configs_present`) reaches it within this crate.
 pub(crate) fn find_project_configs_in(chain_dirs: &[PathBuf]) -> Vec<PathBuf> {
     // `dirs` is cwd-first; reverse so repo root comes first (lowest priority)
@@ -78,7 +78,7 @@ pub(crate) fn find_project_configs_in(chain_dirs: &[PathBuf]) -> Vec<PathBuf> {
     chain_dirs
         .iter()
         .rev()
-        .map(|dir| dir.join(".grok").join("config.toml"))
+        .map(|dir| dir.join(".kami").join("config.toml"))
         .filter(|config_path| config_path.is_file() && !is_user_grok_config_file(config_path))
         .collect()
 }
@@ -106,8 +106,8 @@ mod tests {
 
         let tmp = tempfile::tempdir().unwrap();
         let project = tmp.path().join("repo");
-        std::fs::create_dir_all(project.join(".grok")).unwrap();
-        std::fs::write(project.join(".grok/config.toml"), "# project\n").unwrap();
+        std::fs::create_dir_all(project.join(".kami")).unwrap();
+        std::fs::write(project.join(".kami/config.toml"), "# project\n").unwrap();
         let found = find_project_configs(&project);
         assert_eq!(found.len(), 1);
         assert!(!is_user_grok_config_file(&found[0]));

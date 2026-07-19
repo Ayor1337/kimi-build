@@ -3773,7 +3773,7 @@ pub async fn connect_local_workspace(
         ))
     })?;
     let api_base_url = std::env::var("GROK_CLI_CHAT_PROXY_BASE_URL")
-        .unwrap_or_else(|_| "https://cli-chat-proxy.grok.com/v1".to_string());
+        .unwrap_or_else(|_| "https://api.kimi.com/coding/v1".to_string());
     let data_collection_disabled =
         std::env::var("GROK_WORKSPACE_DATA_COLLECTION_DISABLED").as_deref() != Ok("false");
     let mut factory = WorkspaceSessionContextFactory::with_auth(auth.clone(), api_base_url.clone());
@@ -3868,7 +3868,7 @@ pub async fn connect_local_workspace(
 /// Precedence:
 /// 1. `$GROK_WORKSPACE_HOME` (operator override).
 /// 2. `<grok_home>/workspace`, where `<grok_home>` honours `$GROK_HOME` and
-///    otherwise falls back to `~/.grok` (see [`xai_grok_config::grok_home`]).
+///    otherwise falls back to `~/.kami` (see [`xai_grok_config::grok_home`]).
 pub fn resolve_workspace_home() -> std::path::PathBuf {
     if let Ok(p) = std::env::var("GROK_WORKSPACE_HOME")
         && !p.trim().is_empty()
@@ -9092,7 +9092,7 @@ pub(crate) mod tests {
         let got = bundled_allowlist_ignore_dirs("/nonexistent/bundled-skills", Some("pdf"));
         assert_eq!(got, vec!["/nonexistent/bundled-skills".to_string()]);
     }
-    /// Unique skill names: discovery also reads the dev machine's `~/.grok`.
+    /// Unique skill names: discovery also reads the dev machine's `~/.kami`.
     #[tokio::test]
     async fn bundled_allowlist_filters_discovery() {
         let tmp = tempfile::tempdir().expect("tempdir");

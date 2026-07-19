@@ -49,9 +49,9 @@ use xai_grok_workspace::folder_trust::{
 use crate::session::managed_mcp::mcp_server_name;
 use crate::util::config::{MCP_SCOPE_PROJECT, RemoteSettings};
 
-// NOTE: this folder-trust store (`~/.grok/trusted_folders.toml`) is SEPARATE
+// NOTE: this folder-trust store (`~/.kami/trusted_folders.toml`) is SEPARATE
 // from the pre-existing per-plugin trust store
-// (`xai_grok_agent::plugins::TrustStore` at `~/.grok/trusted-plugins`, plus the
+// (`xai_grok_agent::plugins::TrustStore` at `~/.kami/trusted-plugins`, plus the
 // hooks' own project-trust gating). Trusting a folder here does NOT imply plugin
 // trust and vice versa; the two are independent and non-contradicting.
 // Unifying them is a tracked follow-up (out of scope for this PR).
@@ -404,7 +404,7 @@ fn compute_from_inputs(
 /// project `.cursor/mcp.json`, and `~/.claude.json projects.<cwd>.mcpServers`.
 ///
 /// Edge case: a name declared in BOTH a project config and the global
-/// `~/.grok/config.toml` is dropped when untrusted. This is intended — untrusted
+/// `~/.kami/config.toml` is dropped when untrusted. This is intended — untrusted
 /// project content must not influence the command spawned for a shared name.
 pub fn project_scoped_mcp_names(cwd: &Path) -> HashSet<String> {
     let mut names = HashSet::new();
@@ -672,7 +672,7 @@ mod tests {
         git2::Repository::init(home.path()).unwrap();
         // Repo-local code-exec config, so the final allow is the unrecordable-key
         // rule at work (a recordable key with configs + empty store would deny).
-        std::fs::create_dir_all(home.path().join(".grok").join("hooks")).unwrap();
+        std::fs::create_dir_all(home.path().join(".kami").join("hooks")).unwrap();
 
         assert!(
             !revoke_folder_trust(home.path()),
@@ -829,7 +829,7 @@ mod tests {
         let _env = EnvGuard::set("GROK_HOME", home.path());
         let _flag = EnvGuard::unset("GROK_FOLDER_TRUST");
         let tmp = repo_tmp();
-        let agents = tmp.path().join(".grok").join("agents");
+        let agents = tmp.path().join(".kami").join("agents");
         std::fs::create_dir_all(&agents).unwrap();
         // Shadows the built-in `explore` subagent and carries a command hook.
         std::fs::write(
@@ -883,7 +883,7 @@ mod tests {
         let _env = EnvGuard::set("GROK_HOME", home.path());
         let _flag = EnvGuard::unset("GROK_FOLDER_TRUST");
         let tmp = repo_tmp();
-        std::fs::create_dir_all(tmp.path().join(".grok").join("hooks")).unwrap();
+        std::fs::create_dir_all(tmp.path().join(".kami").join("hooks")).unwrap();
         assert!(
             !project_scope_allowed(tmp.path()),
             "untrusted folder with repo configs must be denied (fail-closed)"
@@ -921,7 +921,7 @@ mod tests {
         let _env = EnvGuard::set("GROK_HOME", home.path());
         let _flag = EnvGuard::unset("GROK_FOLDER_TRUST");
         let tmp = repo_tmp();
-        std::fs::create_dir_all(tmp.path().join(".grok").join("hooks")).unwrap();
+        std::fs::create_dir_all(tmp.path().join(".kami").join("hooks")).unwrap();
         let mut store = TrustStore::load();
         store.set_trusted(&workspace_key(tmp.path())).unwrap();
         assert!(
@@ -944,7 +944,7 @@ mod tests {
         let home = tempfile::tempdir().unwrap();
         let _env = EnvGuard::set("GROK_HOME", home.path());
         let tmp = repo_tmp();
-        std::fs::create_dir_all(tmp.path().join(".grok").join("hooks")).unwrap();
+        std::fs::create_dir_all(tmp.path().join(".kami").join("hooks")).unwrap();
         assert!(
             project_scope_allowed(tmp.path()),
             "inert local/dev build must allow project scope even with configs"
@@ -964,7 +964,7 @@ mod tests {
         let _env = EnvGuard::set("GROK_HOME", home.path());
         let _flag = EnvGuard::unset("GROK_FOLDER_TRUST");
         let tmp = repo_tmp();
-        std::fs::create_dir_all(tmp.path().join(".grok").join("plugins").join("evil")).unwrap();
+        std::fs::create_dir_all(tmp.path().join(".kami").join("plugins").join("evil")).unwrap();
         assert!(
             !project_scope_allowed(tmp.path()),
             "plugin-only untrusted repo must be denied"
@@ -990,7 +990,7 @@ mod tests {
         };
 
         let tmp = repo_tmp();
-        std::fs::create_dir_all(tmp.path().join(".grok").join("hooks")).unwrap();
+        std::fs::create_dir_all(tmp.path().join(".kami").join("hooks")).unwrap();
         assert!(
             resolve_and_record(tmp.path(), Some(&remote), false),
             "kill-switch (feature off) must resolve trusted even with repo configs"
@@ -1004,7 +1004,7 @@ mod tests {
         // misses the kill-switch and denies the same scenario — the exact gap the
         // up-front spawn resolve closes for chat/load sessions.
         let cold = repo_tmp();
-        std::fs::create_dir_all(cold.path().join(".grok").join("hooks")).unwrap();
+        std::fs::create_dir_all(cold.path().join(".kami").join("hooks")).unwrap();
         assert!(
             !project_scope_allowed(cold.path()),
             "cold remote=None gate read denies a kill-switched folder (regression contrast)"
@@ -1033,7 +1033,7 @@ mod tests {
         let tmp = repo_tmp();
         // A project plugin. Project scope is default-disabled, so name it in the
         // `enabled` list to isolate the TRUST gate (not the enable gate).
-        let plugin = tmp.path().join(".grok").join("plugins").join("trustgate");
+        let plugin = tmp.path().join(".kami").join("plugins").join("trustgate");
         std::fs::create_dir_all(&plugin).unwrap();
         std::fs::write(plugin.join("plugin.json"), r#"{"name":"trustgate"}"#).unwrap();
         let cfg = DiscoveryConfig {
@@ -1086,7 +1086,7 @@ mod tests {
         let _env = EnvGuard::set("GROK_HOME", home.path());
         let _flag = EnvGuard::unset("GROK_FOLDER_TRUST");
         let tmp = repo_tmp();
-        let hooks_dir = tmp.path().join(".grok").join("hooks");
+        let hooks_dir = tmp.path().join(".kami").join("hooks");
         std::fs::create_dir_all(&hooks_dir).unwrap();
         // Top-level `{"hooks":{...}}` wrapper; no matcher => match-all. The parsed
         // spec name is `<file_stem>:PreToolUse[..]`, so the file stem identifies it.
@@ -1147,7 +1147,7 @@ mod tests {
                 (
                     LspServerConfig::default(),
                     ConfigSource::Project {
-                        path: PathBuf::from("/repo/.grok/lsp.json"),
+                        path: PathBuf::from("/repo/.kami/lsp.json"),
                     },
                 ),
             );
@@ -1156,7 +1156,7 @@ mod tests {
                 (
                     LspServerConfig::default(),
                     ConfigSource::User {
-                        path: PathBuf::from("/home/.grok/lsp.json"),
+                        path: PathBuf::from("/home/.kami/lsp.json"),
                     },
                 ),
             );
@@ -1187,11 +1187,11 @@ mod tests {
         use xai_grok_tools::implementations::lsp::config::load_servers_with_plugins_sourced;
         use xai_grok_tools::types::config_source::ConfigSource;
 
-        // A `<cwd>/.grok/lsp.json` server must be tagged `Project` so the gate
+        // A `<cwd>/.kami/lsp.json` server must be tagged `Project` so the gate
         // can distinguish it from user/plugin servers. Asserts on the specific
-        // key, so any real `~/.grok/lsp.json` on the test host is irrelevant.
+        // key, so any real `~/.kami/lsp.json` on the test host is irrelevant.
         let tmp = repo_tmp();
-        let grok = tmp.path().join(".grok");
+        let grok = tmp.path().join(".kami");
         std::fs::create_dir_all(&grok).unwrap();
         std::fs::write(grok.join("lsp.json"), r#"{"projlsp": {"command": "true"}}"#).unwrap();
 
@@ -1208,9 +1208,9 @@ mod tests {
         use xai_grok_tools::implementations::lsp::config::load_servers_with_plugins_sourced;
 
         // End-to-end of the load-site gate (Sites A/B): a project server loaded
-        // from `<cwd>/.grok/lsp.json` is dropped once the workspace is untrusted.
+        // from `<cwd>/.kami/lsp.json` is dropped once the workspace is untrusted.
         let tmp = repo_tmp();
-        let grok = tmp.path().join(".grok");
+        let grok = tmp.path().join(".kami");
         std::fs::create_dir_all(&grok).unwrap();
         std::fs::write(grok.join("lsp.json"), r#"{"projlsp": {"command": "true"}}"#).unwrap();
 
@@ -1244,7 +1244,7 @@ mod tests {
             r#"{"mcpServers": {"projjson": {"url": "https://proj.example.com/mcp"}}}"#,
         )
         .unwrap();
-        let grok = tmp.path().join(".grok");
+        let grok = tmp.path().join(".kami");
         std::fs::create_dir_all(&grok).unwrap();
         std::fs::write(
             grok.join("config.toml"),
@@ -1265,7 +1265,7 @@ mod tests {
     #[test]
     fn project_scoped_mcp_names_cover_every_source() {
         let tmp = repo_tmp();
-        let grok = tmp.path().join(".grok");
+        let grok = tmp.path().join(".kami");
         std::fs::create_dir_all(&grok).unwrap();
         std::fs::write(
             grok.join("config.toml"),
@@ -1439,7 +1439,7 @@ mod tests {
         );
 
         // A repo-local code-exec config appears after the first resolve.
-        std::fs::create_dir_all(tmp.path().join(".grok").join("hooks")).unwrap();
+        std::fs::create_dir_all(tmp.path().join(".kami").join("hooks")).unwrap();
 
         // The next resolve re-checks `repo_configs_present` (no stale grant to
         // ride) => headless untrusted, so the newly-added hooks are now gated.
@@ -1480,14 +1480,14 @@ mod tests {
 
         // (b) Configs present + untrusted (empty store, headless) => false.
         let untrusted = repo_tmp();
-        std::fs::create_dir_all(untrusted.path().join(".grok").join("hooks")).unwrap();
+        std::fs::create_dir_all(untrusted.path().join(".kami").join("hooks")).unwrap();
         let lt = resolve_launch_dir_trust(untrusted.path(), None);
         assert_eq!(lt, resolve_and_record(untrusted.path(), None, false));
         assert!(!lt, "untrusted configs launch dir must be denied");
 
         // (c) Configs present + store-trusted => true.
         let trusted = repo_tmp();
-        std::fs::create_dir_all(trusted.path().join(".grok").join("hooks")).unwrap();
+        std::fs::create_dir_all(trusted.path().join(".kami").join("hooks")).unwrap();
         let mut store = TrustStore::load();
         store.set_trusted(&workspace_key(trusted.path())).unwrap();
         let lt = resolve_launch_dir_trust(trusted.path(), None);
@@ -1619,8 +1619,8 @@ mod tests {
     fn detected_config_kinds_summarizes_present_markers() {
         let tmp = repo_tmp();
         std::fs::write(tmp.path().join(".mcp.json"), "{}").unwrap();
-        std::fs::create_dir_all(tmp.path().join(".grok").join("hooks")).unwrap();
-        std::fs::write(tmp.path().join(".grok").join("lsp.json"), "{}").unwrap();
+        std::fs::create_dir_all(tmp.path().join(".kami").join("hooks")).unwrap();
+        std::fs::write(tmp.path().join(".kami").join("lsp.json"), "{}").unwrap();
         std::fs::write(tmp.path().join(".envrc"), "export X=1\n").unwrap();
         let kinds = detected_config_kinds(tmp.path());
         assert!(kinds.contains(&"mcp".to_string()));
@@ -1636,8 +1636,8 @@ mod tests {
         // Regression for the "empty configKinds" bug: a repo gated SOLELY by
         // `.grok/lsp.json` must still produce a non-empty reason list.
         let tmp = repo_tmp();
-        std::fs::create_dir_all(tmp.path().join(".grok")).unwrap();
-        std::fs::write(tmp.path().join(".grok").join("lsp.json"), "{}").unwrap();
+        std::fs::create_dir_all(tmp.path().join(".kami")).unwrap();
+        std::fs::write(tmp.path().join(".kami").join("lsp.json"), "{}").unwrap();
         let kinds = detected_config_kinds(tmp.path());
         assert_eq!(kinds, vec!["lsp".to_string()]);
     }

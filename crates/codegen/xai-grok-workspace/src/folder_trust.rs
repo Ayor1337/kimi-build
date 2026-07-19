@@ -3,7 +3,7 @@
 //! This is the client/workspace half of the folder-trust gate: it scans a
 //! workspace for repo-local code-exec configs, resolves the pure trust
 //! [`decide`] precedence, prompts (MVP stderr), and reads/writes the durable
-//! [`crate::trust::TrustStore`] (`~/.grok/trusted_folders.toml`). The
+//! [`crate::trust::TrustStore`] (`~/.kami/trusted_folders.toml`). The
 //! consume/gating half (the `DECISIONS` cache, `resolve_and_record`,
 //! `project_scope_allowed`, the loader filters) lives in `xai-grok-shell`.
 //!
@@ -110,7 +110,7 @@ pub fn decide_inputs_with_interactive(
         is_interactive,
         // An over-broad key (home / fs-root / non-absolute) can never be recorded
         // by the store, so decide() trusts it rather than prompt on a key that
-        // can't persist (Case 2: cwd IS $HOME, incl. the default `~/.grok`).
+        // can't persist (Case 2: cwd IS $HOME, incl. the default `~/.kami`).
         key_recordable: !crate::trust::is_unsafe_trust_root(key),
     }
 }
@@ -183,7 +183,7 @@ fn feature_enabled_for_build(remote: Option<&RemoteSettings>, is_local_build: bo
 /// Persist an explicit `--trust` grant for `cwd`'s workspace so repo-local
 /// servers are honored on the next resolve. Done client-side because trust is
 /// durable: even when the agent runs in a separate leader process it reads the
-/// same `~/.grok/trusted_folders.toml`. Best-effort; a write failure is logged,
+/// same `~/.kami/trusted_folders.toml`. Best-effort; a write failure is logged,
 /// not fatal.
 pub fn grant_folder_trust(cwd: &Path) {
     // Local/dev builds never gate, so there is nothing to grant: `--trust` is a
@@ -328,7 +328,7 @@ fn collect_repo_config_kinds(cwd: &Path, first_only: bool) -> Vec<&'static str> 
         }
     }
     // Project `.grok/lsp.json`.
-    if cwd.join(".grok").join("lsp.json").is_file() {
+    if cwd.join(".kami").join("lsp.json").is_file() {
         hit!("lsp");
     }
     // Project `.cursor/mcp.json` — vendor MCP loading is default-on and tagged
@@ -363,7 +363,7 @@ fn collect_repo_config_kinds(cwd: &Path, first_only: bool) -> Vec<&'static str> 
     // resolve trusted and run ungated. Presence mirrors discovery's "something to
     // gate" check.
     let hook_root = chain.git_root.as_deref().unwrap_or(cwd);
-    if path_present_or_uncertain(&hook_root.join(".grok").join("hooks"))
+    if path_present_or_uncertain(&hook_root.join(".kami").join("hooks"))
         || hook_root.join(".cursor").join("hooks.json").is_file()
     {
         hit!("hooks");
@@ -386,7 +386,7 @@ fn collect_repo_config_kinds(cwd: &Path, first_only: bool) -> Vec<&'static str> 
         hit!("agents");
     }
     // Presence matches exact-cwd discovery without parsing repository content.
-    let grok = cwd.join(".grok");
+    let grok = cwd.join(".kami");
     if directory_present_or_uncertain(&grok.join("roles")) {
         hit!("roles");
     }
@@ -549,7 +549,7 @@ mod tests {
     #[test]
     fn repo_configs_present_detects_grok_config_mcp_servers() {
         let tmp = repo_tmp();
-        let grok = tmp.path().join(".grok");
+        let grok = tmp.path().join(".kami");
         std::fs::create_dir_all(&grok).unwrap();
         std::fs::write(grok.join("config.toml"), "[mcp_servers.x]\ncommand=\"y\"\n").unwrap();
         assert!(repo_configs_present(tmp.path()));
@@ -558,7 +558,7 @@ mod tests {
     #[test]
     fn repo_configs_present_detects_grok_lsp_json() {
         let tmp = repo_tmp();
-        let grok = tmp.path().join(".grok");
+        let grok = tmp.path().join(".kami");
         std::fs::create_dir_all(&grok).unwrap();
         std::fs::write(grok.join("lsp.json"), "{}").unwrap();
         assert!(repo_configs_present(tmp.path()));
@@ -588,7 +588,7 @@ mod tests {
         // can carry an inline `hooks:` block (code-exec) and can shadow a built-in
         // subagent by name.
         let tmp = repo_tmp();
-        std::fs::create_dir_all(tmp.path().join(".grok").join("agents")).unwrap();
+        std::fs::create_dir_all(tmp.path().join(".kami").join("agents")).unwrap();
         assert!(repo_configs_present(tmp.path()));
     }
 
@@ -606,7 +606,7 @@ mod tests {
         // detection walks cwd→git root exactly like agent discovery, so it must
         // still fire (a cwd-only probe would miss it).
         let tmp = repo_tmp();
-        std::fs::create_dir_all(tmp.path().join(".grok").join("agents")).unwrap();
+        std::fs::create_dir_all(tmp.path().join(".kami").join("agents")).unwrap();
         let subdir = tmp.path().join("crates").join("inner");
         std::fs::create_dir_all(&subdir).unwrap();
         assert!(repo_configs_present(&subdir));
@@ -615,7 +615,7 @@ mod tests {
     #[test]
     fn repo_configs_present_detects_project_roles() {
         let tmp = repo_tmp();
-        std::fs::create_dir_all(tmp.path().join(".grok").join("roles")).unwrap();
+        std::fs::create_dir_all(tmp.path().join(".kami").join("roles")).unwrap();
 
         assert!(repo_configs_present(tmp.path()));
         assert!(repo_config_kinds(tmp.path()).contains(&"roles"));
@@ -624,7 +624,7 @@ mod tests {
     #[test]
     fn repo_configs_present_detects_project_personas() {
         let tmp = repo_tmp();
-        std::fs::create_dir_all(tmp.path().join(".grok").join("personas")).unwrap();
+        std::fs::create_dir_all(tmp.path().join(".kami").join("personas")).unwrap();
 
         assert!(repo_configs_present(tmp.path()));
         assert!(repo_config_kinds(tmp.path()).contains(&"personas"));
@@ -633,7 +633,7 @@ mod tests {
     #[test]
     fn project_subagent_marker_regular_file_is_absent() {
         let tmp = repo_tmp();
-        let grok = tmp.path().join(".grok");
+        let grok = tmp.path().join(".kami");
         std::fs::create_dir_all(&grok).unwrap();
         std::fs::write(grok.join("roles"), "not a directory").unwrap();
         assert!(!repo_configs_present(tmp.path()));
@@ -642,7 +642,7 @@ mod tests {
     #[test]
     fn project_subagent_marker_at_repo_root_is_absent_from_subdir() {
         let tmp = repo_tmp();
-        std::fs::create_dir_all(tmp.path().join(".grok/roles")).unwrap();
+        std::fs::create_dir_all(tmp.path().join(".kami/roles")).unwrap();
         let subdir = tmp.path().join("nested");
         std::fs::create_dir_all(&subdir).unwrap();
         assert!(!repo_configs_present(&subdir));
@@ -653,7 +653,7 @@ mod tests {
     fn project_subagent_marker_symlink_to_directory_is_present() {
         let tmp = repo_tmp();
         let target = tmp.path().join("target-roles");
-        let grok = tmp.path().join(".grok");
+        let grok = tmp.path().join(".kami");
         std::fs::create_dir_all(&target).unwrap();
         std::fs::create_dir_all(&grok).unwrap();
         std::os::unix::fs::symlink(&target, grok.join("roles")).unwrap();
@@ -664,7 +664,7 @@ mod tests {
     #[test]
     fn dangling_project_subagent_marker_is_absent() {
         let tmp = repo_tmp();
-        let grok = tmp.path().join(".grok");
+        let grok = tmp.path().join(".kami");
         std::fs::create_dir_all(&grok).unwrap();
         std::os::unix::fs::symlink("missing", grok.join("personas")).unwrap();
         assert!(!repo_configs_present(tmp.path()));
@@ -689,14 +689,14 @@ mod tests {
         // A hooks-only repo (no MCP/LSP configs) must still be gated, so its
         // project hooks don't run ungated when the folder is untrusted.
         let tmp = repo_tmp();
-        std::fs::create_dir_all(tmp.path().join(".grok").join("hooks")).unwrap();
+        std::fs::create_dir_all(tmp.path().join(".kami").join("hooks")).unwrap();
         assert!(repo_configs_present(tmp.path()));
     }
 
     #[test]
     fn repo_configs_present_detects_project_hooks_file() {
         let tmp = repo_tmp();
-        let grok = tmp.path().join(".grok");
+        let grok = tmp.path().join(".kami");
         std::fs::create_dir_all(&grok).unwrap();
         std::fs::write(grok.join("hooks"), "{}").unwrap();
 
@@ -708,7 +708,7 @@ mod tests {
     #[test]
     fn repo_configs_present_detects_dangling_project_hooks_symlink() {
         let tmp = repo_tmp();
-        let grok = tmp.path().join(".grok");
+        let grok = tmp.path().join(".kami");
         std::fs::create_dir_all(&grok).unwrap();
         std::os::unix::fs::symlink("missing-hooks", grok.join("hooks")).unwrap();
 
@@ -722,7 +722,7 @@ mod tests {
         // the gate must still fire because discovery resolves hooks from the root
         // (the cwd-relative check this regresses would miss it).
         let tmp = repo_tmp();
-        std::fs::create_dir_all(tmp.path().join(".grok").join("hooks")).unwrap();
+        std::fs::create_dir_all(tmp.path().join(".kami").join("hooks")).unwrap();
         let subdir = tmp.path().join("crates").join("inner");
         std::fs::create_dir_all(&subdir).unwrap();
         assert!(repo_configs_present(&subdir));
@@ -733,7 +733,7 @@ mod tests {
         // A plugin-only repo (no MCP/LSP/hooks configs) must still be gated, so a
         // project plugin's hooks/MCP don't run ungated when the folder is untrusted.
         let tmp = repo_tmp();
-        std::fs::create_dir_all(tmp.path().join(".grok").join("plugins").join("x")).unwrap();
+        std::fs::create_dir_all(tmp.path().join(".kami").join("plugins").join("x")).unwrap();
         assert!(repo_configs_present(tmp.path()));
     }
 
@@ -744,7 +744,7 @@ mod tests {
         // discover_plugins, so a subdir-only plugin is not a fail-open hole.
         let tmp = repo_tmp();
         let subdir = tmp.path().join("packages").join("foo");
-        std::fs::create_dir_all(subdir.join(".grok").join("plugins").join("evil")).unwrap();
+        std::fs::create_dir_all(subdir.join(".kami").join("plugins").join("evil")).unwrap();
         assert!(repo_configs_present(&subdir));
     }
 
@@ -753,7 +753,7 @@ mod tests {
         // A project config whose `[mcp_servers]` table is empty has nothing to
         // gate, so it must not trip the gate.
         let tmp = repo_tmp();
-        let grok = tmp.path().join(".grok");
+        let grok = tmp.path().join(".kami");
         std::fs::create_dir_all(&grok).unwrap();
         std::fs::write(grok.join("config.toml"), "[mcp_servers]\n").unwrap();
         assert!(!repo_configs_present(tmp.path()));
@@ -765,7 +765,7 @@ mod tests {
         // dir, no MCP/LSP/hooks) must still be gated: those paths load as
         // auto-trusted ConfigPath plugins, so an ungated clone is a live RCE.
         let tmp = repo_tmp();
-        let grok = tmp.path().join(".grok");
+        let grok = tmp.path().join(".kami");
         std::fs::create_dir_all(&grok).unwrap();
         std::fs::write(grok.join("config.toml"), "[plugins]\npaths = [\"./x\"]\n").unwrap();
         assert!(repo_configs_present(tmp.path()));
@@ -776,7 +776,7 @@ mod tests {
         // An empty `[plugins].paths` (or a `[plugins]` table without `paths`)
         // contributes no plugin code-exec, so it must not trip the gate.
         let tmp = repo_tmp();
-        let grok = tmp.path().join(".grok");
+        let grok = tmp.path().join(".kami");
         std::fs::create_dir_all(&grok).unwrap();
         std::fs::write(grok.join("config.toml"), "[plugins]\npaths = []\n").unwrap();
         assert!(!repo_configs_present(tmp.path()));
@@ -791,7 +791,7 @@ mod tests {
         // `.grok/agents` — even when launched from a SUBDIR (the cwd→git-root walk
         // that `first_only` shares). Guards against silent drift between the two.
         let tmp = repo_tmp();
-        let grok = tmp.path().join(".grok");
+        let grok = tmp.path().join(".kami");
         std::fs::create_dir_all(grok.join("agents")).unwrap();
         std::fs::write(grok.join("config.toml"), "[plugins]\npaths = [\"./x\"]\n").unwrap();
         let claude = tmp.path().join(".claude");

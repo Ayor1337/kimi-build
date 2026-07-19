@@ -1790,7 +1790,7 @@ mod tests {
             ".claude/worktrees/abc/src/main.rs"
         )));
         assert!(is_under_hidden_dir(Path::new(
-            ".grok/worktrees/repo/lib.rs"
+            ".kami/worktrees/repo/lib.rs"
         )));
         assert!(is_under_hidden_dir(Path::new("src/.hidden/file.rs")));
     }

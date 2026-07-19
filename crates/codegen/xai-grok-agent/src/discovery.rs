@@ -1,7 +1,7 @@
 //! Agent definition file discovery.
 //!
 //! Searches `.grok/agents/` and `.claude/agents/` from cwd to repo root,
-//! then `~/.grok/agents/`, then `~/.claude/agents/`. Name-based dedup keeps
+//! then `~/.kami/agents/`, then `~/.claude/agents/`. Name-based dedup keeps
 //! highest priority.
 
 use std::collections::HashMap;
@@ -15,7 +15,7 @@ use crate::error::AgentBuildError;
 use crate::prompt::context::TemplateOverride;
 
 /// Project-level agent directories to scan (`.grok/agents/` + `.claude/agents/` compat).
-const PROJECT_AGENT_SUBDIRS: &[&str] = &[".grok/agents", ".claude/agents"];
+const PROJECT_AGENT_SUBDIRS: &[&str] = &[".kami/agents", ".claude/agents"];
 
 /// Existing project-level agent dirs (`.grok/agents` / `.claude/agents`), walked
 /// from `cwd` up to the git worktree root (inclusive). Returns
@@ -123,7 +123,7 @@ fn merge_subagents(
     // the runtime spawn precedence in by_name_in_cwd():
     //   project > built-in > user > bundled
     //
-    // A user-level ~/.grok/agents/explore.md does NOT shadow built-in explore
+    // A user-level ~/.kami/agents/explore.md does NOT shadow built-in explore
     // at spawn time, so it must not shadow it in the visible list either.
     // Otherwise: visible != callable (the guarantee would be broken).
     for def in discovered {
@@ -184,24 +184,24 @@ fn merge_subagents(
 ///
 /// Search order (highest priority first):
 /// 1. `.grok/agents/` walking from `cwd` up to repo root
-/// 2. `~/.grok/agents/` (user-level)
+/// 2. `~/.kami/agents/` (user-level)
 /// 3. `~/.claude/agents/` (compat user-level)
-/// 4. `~/.grok/bundled/agents/` (bundled, lowest priority)
+/// 4. `~/.kami/bundled/agents/` (bundled, lowest priority)
 ///
 /// Deduplicates by name — higher-priority definitions win.
 /// User-level agent directories in priority order: user grok agents, `.claude`
 /// compat agents, then bundled. `.grok` dirs resolve from `grok_home`
-/// (GROK_HOME-aware) plus the legacy literal `~/.grok` when GROK_HOME points
+/// (GROK_HOME-aware) plus the legacy literal `~/.kami` when GROK_HOME points
 /// elsewhere; `.claude` resolves from `home`.
 pub(crate) fn user_agent_dirs(
     home: Option<&Path>,
     grok_home: Option<&Path>,
 ) -> Vec<(std::path::PathBuf, AgentScope)> {
-    // Legacy literal ~/.grok, included only when it differs from grok_home
+    // Legacy literal ~/.kami, included only when it differs from grok_home
     // (i.e. GROK_HOME points elsewhere) so agents left in the old location are
     // still discovered and stay consistent with scope_from_path classification.
     let legacy_grok = home
-        .map(|h| h.join(".grok"))
+        .map(|h| h.join(".kami"))
         .filter(|legacy| grok_home != Some(legacy.as_path()));
 
     let mut dirs = Vec::new();
@@ -771,23 +771,23 @@ mod tests {
             .map(|(p, _)| p)
             .collect();
         assert!(paths.contains(&grok.join("agents")));
-        assert!(paths.contains(&home.join(".grok").join("agents")));
+        assert!(paths.contains(&home.join(".kami").join("agents")));
         assert!(paths.contains(&home.join(".claude").join("agents")));
         assert!(paths.contains(&grok.join("bundled").join("agents")));
-        assert!(paths.contains(&home.join(".grok").join("bundled").join("agents")));
+        assert!(paths.contains(&home.join(".kami").join("bundled").join("agents")));
     }
 
     #[test]
     fn user_agent_dirs_dedups_legacy_when_grok_home_is_dot_grok() {
         let home = Path::new("/home/u");
-        let grok = home.join(".grok");
+        let grok = home.join(".kami");
         let count = user_agent_dirs(Some(home), Some(&grok))
             .into_iter()
             .filter(|(p, _)| *p == grok.join("agents"))
             .count();
         assert_eq!(
             count, 1,
-            "no duplicate ~/.grok/agents when grok_home == ~/.grok"
+            "no duplicate ~/.kami/agents when grok_home == ~/.kami"
         );
     }
 
@@ -829,7 +829,7 @@ mod tests {
     #[test]
     fn test_discover_finds_md_files() {
         let tmp = tempfile::tempdir().unwrap();
-        let agents_dir = tmp.path().join(".grok").join("agents");
+        let agents_dir = tmp.path().join(".kami").join("agents");
         fs::create_dir_all(&agents_dir).unwrap();
 
         write_agent_file(&agents_dir, "test-agent.md", "test-agent", "A test");
@@ -845,7 +845,7 @@ mod tests {
     #[test]
     fn test_discover_ignores_non_md_files() {
         let tmp = tempfile::tempdir().unwrap();
-        let agents_dir = tmp.path().join(".grok").join("agents");
+        let agents_dir = tmp.path().join(".kami").join("agents");
         fs::create_dir_all(&agents_dir).unwrap();
 
         write_agent_file(&agents_dir, "valid.md", "valid", "Valid agent");
@@ -860,7 +860,7 @@ mod tests {
     #[test]
     fn test_discover_invalid_md_logged_not_error() {
         let tmp = tempfile::tempdir().unwrap();
-        let agents_dir = tmp.path().join(".grok").join("agents");
+        let agents_dir = tmp.path().join(".kami").join("agents");
         fs::create_dir_all(&agents_dir).unwrap();
 
         write_agent_file(&agents_dir, "good.md", "good", "Good agent");
@@ -881,8 +881,8 @@ mod tests {
         let inner_dir = tmp.path().join("subdir");
         fs::create_dir_all(&inner_dir).unwrap();
 
-        let agents_dir_1 = tmp.path().join(".grok").join("agents");
-        let agents_dir_2 = inner_dir.join(".grok").join("agents");
+        let agents_dir_1 = tmp.path().join(".kami").join("agents");
+        let agents_dir_2 = inner_dir.join(".kami").join("agents");
         fs::create_dir_all(&agents_dir_1).unwrap();
         fs::create_dir_all(&agents_dir_2).unwrap();
 
@@ -900,7 +900,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let cwd = tmp.path().join("workspace");
         let home = tmp.path().join("home");
-        let bundled_dir = home.join(".grok").join("bundled").join("agents");
+        let bundled_dir = home.join(".kami").join("bundled").join("agents");
         fs::create_dir_all(&cwd).unwrap();
         fs::create_dir_all(&bundled_dir).unwrap();
 
@@ -911,7 +911,7 @@ mod tests {
             "Bundled agent",
         );
 
-        let defs = discover_with_home(&cwd, Some(&home), Some(&home.join(".grok")));
+        let defs = discover_with_home(&cwd, Some(&home), Some(&home.join(".kami")));
         assert_eq!(defs.len(), 1);
         assert_eq!(defs[0].name, "bundled-agent");
         assert_eq!(defs[0].scope, AgentScope::Bundled);
@@ -922,7 +922,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let cwd = tmp.path().join("workspace");
         let home = tmp.path().join("home");
-        let bundled_dir = home.join(".grok").join("bundled").join("agents");
+        let bundled_dir = home.join(".kami").join("bundled").join("agents");
         fs::create_dir_all(&cwd).unwrap();
         fs::create_dir_all(&bundled_dir).unwrap();
 
@@ -934,7 +934,7 @@ mod tests {
         );
 
         let def =
-            by_name_in_cwd_with_home("bundled-only", &cwd, Some(&home), Some(&home.join(".grok")))
+            by_name_in_cwd_with_home("bundled-only", &cwd, Some(&home), Some(&home.join(".kami")))
                 .unwrap();
         assert_eq!(def.scope, AgentScope::Bundled);
         assert_eq!(def.description, "Bundled only");
@@ -945,8 +945,8 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let cwd = tmp.path().join("workspace");
         let home = tmp.path().join("home");
-        let user_dir = home.join(".grok").join("agents");
-        let bundled_dir = home.join(".grok").join("bundled").join("agents");
+        let user_dir = home.join(".kami").join("agents");
+        let bundled_dir = home.join(".kami").join("bundled").join("agents");
         fs::create_dir_all(&cwd).unwrap();
         fs::create_dir_all(&user_dir).unwrap();
         fs::create_dir_all(&bundled_dir).unwrap();
@@ -955,7 +955,7 @@ mod tests {
         write_agent_file(&bundled_dir, "reviewer.md", "reviewer", "Bundled reviewer");
 
         let def =
-            by_name_in_cwd_with_home("reviewer", &cwd, Some(&home), Some(&home.join(".grok")))
+            by_name_in_cwd_with_home("reviewer", &cwd, Some(&home), Some(&home.join(".kami")))
                 .unwrap();
         assert_eq!(def.scope, AgentScope::User);
         assert_eq!(def.description, "User reviewer");
@@ -966,13 +966,13 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let cwd = tmp.path().join("workspace");
         let home = tmp.path().join("home");
-        let bundled_dir = home.join(".grok").join("bundled").join("agents");
+        let bundled_dir = home.join(".kami").join("bundled").join("agents");
         fs::create_dir_all(&cwd).unwrap();
         fs::create_dir_all(&bundled_dir).unwrap();
 
         write_agent_file(&bundled_dir, "explore.md", "explore", "Bundled explore");
 
-        let def = by_name_in_cwd_with_home("explore", &cwd, Some(&home), Some(&home.join(".grok")))
+        let def = by_name_in_cwd_with_home("explore", &cwd, Some(&home), Some(&home.join(".kami")))
             .unwrap();
         assert_eq!(def.scope, AgentScope::BuiltIn);
         assert_ne!(def.description, "Bundled explore");
@@ -983,8 +983,8 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let cwd = tmp.path().join("workspace");
         let home = tmp.path().join("home");
-        let project_dir = cwd.join(".grok").join("agents");
-        let bundled_dir = home.join(".grok").join("bundled").join("agents");
+        let project_dir = cwd.join(".kami").join("agents");
+        let bundled_dir = home.join(".kami").join("bundled").join("agents");
         fs::create_dir_all(&project_dir).unwrap();
         fs::create_dir_all(&bundled_dir).unwrap();
 
@@ -992,7 +992,7 @@ mod tests {
         write_agent_file(&bundled_dir, "reviewer.md", "reviewer", "Bundled reviewer");
 
         let def =
-            by_name_in_cwd_with_home("reviewer", &cwd, Some(&home), Some(&home.join(".grok")))
+            by_name_in_cwd_with_home("reviewer", &cwd, Some(&home), Some(&home.join(".kami")))
                 .unwrap();
         assert_eq!(def.scope, AgentScope::Project);
         assert_eq!(def.description, "Project reviewer");
@@ -1001,7 +1001,7 @@ mod tests {
     #[test]
     fn test_by_name_in_cwd_project_shadows_builtin() {
         let tmp = tempfile::tempdir().unwrap();
-        let agents_dir = tmp.path().join(".grok").join("agents");
+        let agents_dir = tmp.path().join(".kami").join("agents");
         fs::create_dir_all(&agents_dir).unwrap();
 
         // Create a project-level "grok-build" that shadows the built-in
@@ -1173,7 +1173,7 @@ mod tests {
 
     #[test]
     fn test_merge_user_level_builtin_name_is_skipped() {
-        // A user-level (~/.grok/agents/) agent named "explore" should NOT shadow
+        // A user-level (~/.kami/agents/) agent named "explore" should NOT shadow
         // the built-in — only project-level can do that.
         let discovered = vec![synthetic_agent(
             "explore",
@@ -1310,7 +1310,7 @@ mod tests {
     #[test]
     fn test_all_subagents_with_project_agent_file() {
         let tmp = tempfile::tempdir().unwrap();
-        let agents_dir = tmp.path().join(".grok").join("agents");
+        let agents_dir = tmp.path().join(".kami").join("agents");
         fs::create_dir_all(&agents_dir).unwrap();
 
         write_agent_file(
@@ -1334,8 +1334,8 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let cwd = tmp.path().join("workspace");
         let home = tmp.path().join("home");
-        let user_dir = home.join(".grok").join("agents");
-        let bundled_dir = home.join(".grok").join("bundled").join("agents");
+        let user_dir = home.join(".kami").join("agents");
+        let bundled_dir = home.join(".kami").join("bundled").join("agents");
         fs::create_dir_all(&cwd).unwrap();
         fs::create_dir_all(&user_dir).unwrap();
         fs::create_dir_all(&bundled_dir).unwrap();
@@ -1354,7 +1354,7 @@ mod tests {
             &HashMap::new(),
             Some(&registry),
             Some(&home),
-            Some(&home.join(".grok")),
+            Some(&home.join(".kami")),
         );
 
         let native = entries.iter().find(|e| e.name == "reviewer").unwrap();
@@ -1373,7 +1373,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let cwd = tmp.path().join("workspace");
         let home = tmp.path().join("home");
-        let bundled_dir = home.join(".grok").join("bundled").join("agents");
+        let bundled_dir = home.join(".kami").join("bundled").join("agents");
         fs::create_dir_all(&cwd).unwrap();
         fs::create_dir_all(&bundled_dir).unwrap();
         write_agent_file(&bundled_dir, "reviewer.md", "reviewer", "Bundled reviewer");
@@ -1389,7 +1389,7 @@ mod tests {
             &cwd,
             Some(&registry),
             Some(&home),
-            Some(&home.join(".grok")),
+            Some(&home.join(".kami")),
         )
         .unwrap();
 
@@ -1424,7 +1424,7 @@ mod tests {
             &cwd,
             Some(&registry),
             Some(&home),
-            Some(&home.join(".grok")),
+            Some(&home.join(".kami")),
         )
         .unwrap();
         let bare_body = bare.prompt_body.as_deref().unwrap();
@@ -1443,7 +1443,7 @@ mod tests {
             &cwd,
             Some(&registry),
             Some(&home),
-            Some(&home.join(".grok")),
+            Some(&home.join(".kami")),
         )
         .unwrap();
         let qualified_body = qualified.prompt_body.as_deref().unwrap();
@@ -1483,7 +1483,7 @@ mod tests {
     #[test]
     fn test_all_subagents_toggle_filters_project_agent() {
         let tmp = tempfile::tempdir().unwrap();
-        let agents_dir = tmp.path().join(".grok").join("agents");
+        let agents_dir = tmp.path().join(".kami").join("agents");
         fs::create_dir_all(&agents_dir).unwrap();
 
         write_agent_file(

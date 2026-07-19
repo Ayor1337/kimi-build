@@ -5,8 +5,8 @@
 //! and assert the mode banner / status shows Auto without conflating
 //! Always-Approve.
 //!
-//! Auth: seeds `HOME/.grok/auth.json` from `GROK_AUTH_JSON` (path) or the
-//! developer's `~/.grok/auth.json` so the pager skips device-login when
+//! Auth: seeds `HOME/.kami/auth.json` from `GROK_AUTH_JSON` (path) or the
+//! developer's `~/.kami/auth.json` so the pager skips device-login when
 //! credentials exist. Without auth the test records an environmental
 //! failure (login screen) and still asserts the harness API surface.
 //!
@@ -26,7 +26,7 @@ const WELCOME_SCREEN_SENTINEL: &str = "Quit";
 /// Back-tab / Shift+Tab (CSI Z) — pager binds this to CycleMode.
 const SHIFT_TAB: &[u8] = b"\x1b[Z";
 
-/// Prefer explicit path, else the user's real `~/.grok/auth.json`.
+/// Prefer explicit path, else the user's real `~/.kami/auth.json`.
 fn auth_json_source() -> Option<PathBuf> {
     if let Ok(p) = std::env::var("GROK_AUTH_JSON") {
         let pb = PathBuf::from(p);
@@ -35,7 +35,7 @@ fn auth_json_source() -> Option<PathBuf> {
         }
     }
     dirs_next_home()
-        .map(|h| h.join(".grok/auth.json"))
+        .map(|h| h.join(".kami/auth.json"))
         .filter(|p| p.is_file())
 }
 
@@ -49,7 +49,7 @@ fn dirs_next_home() -> Option<PathBuf> {
 /// auto-permission-mode feature gate pinned explicitly via `gate_on` so each
 /// test is self-contained and deterministic regardless of the runner's shell.
 fn prepare_sandbox(home: &Path, gate_on: bool) -> Vec<(String, String)> {
-    let grok = home.join(".grok");
+    let grok = home.join(".kami");
     let _ = std::fs::create_dir_all(&grok);
     if let Some(src) = auth_json_source() {
         let dest = grok.join("auth.json");
@@ -63,7 +63,7 @@ fn prepare_sandbox(home: &Path, gate_on: bool) -> Vec<(String, String)> {
             );
         }
     } else {
-        eprintln!("pty_auto_mode: no ~/.grok/auth.json — may hit device login");
+        eprintln!("pty_auto_mode: no ~/.kami/auth.json — may hit device login");
     }
 
     let home_s = home.display().to_string();

@@ -990,5 +990,6 @@ fn test_bal(usage_pct: f64) -> crate::views::credit_bar::CreditBalance {
         prepaid_balance_cents: None,
         period_type: None,
         is_unified_billing_user: None,
+        quota_rows: vec![],
     }
 }

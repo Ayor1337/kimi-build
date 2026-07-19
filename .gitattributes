@@ -1,0 +1,3 @@
+# bin/protoc 是 dotslash 脚本，shebang 必须为 LF，
+# 否则 core.autocrlf=true 的环境 checkout 后无法执行
+bin/protoc text eol=lf

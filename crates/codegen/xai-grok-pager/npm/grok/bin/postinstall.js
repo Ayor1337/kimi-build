@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Runs once after npm install/update. Reads the grok binary from the
 // matching per-platform optional dependency (@xai-official/grok-<platform>)
-// and installs it to ~/.grok/bin/ using versioned filenames:
+// and installs it to ~/.kami/bin/ using versioned filenames:
 //
 //   Unix:    grok-<version>  +  grok  (symlink)
 //   Windows: grok-<version>.exe  +  grok.exe  (copy)
@@ -203,7 +203,7 @@ if (npmRegistry) {
 fs.writeFileSync(configPath, TOML.stringify(obj), 'utf8');
 
 // Shell completions: print setup hints (no silent shell config mutation).
-// Set GROK_INSTALL_COMPLETIONS=1 to auto-generate to ~/.grok/completions.
+// Set GROK_INSTALL_COMPLETIONS=1 to auto-generate to ~/.kami/completions.
 const GROK_PATH = path.join(CANONICAL_DIR, `grok${EXE}`);
 if (process.env.GROK_INSTALL_COMPLETIONS === '1' && !IS_WINDOWS) {
     try {
@@ -217,7 +217,7 @@ if (process.env.GROK_INSTALL_COMPLETIONS === '1' && !IS_WINDOWS) {
         if (bashRes.status === 0) fs.writeFileSync(bashPath, bashRes.stdout);
         const zshRes = spawnSync(GROK_PATH, ['completions', 'zsh'], { encoding: 'utf8' });
         if (zshRes.status === 0) fs.writeFileSync(zshPath, zshRes.stdout);
-        console.log('Completions generated to ~/.grok/completions (bash/zsh)');
+        console.log('Completions generated to ~/.kami/completions (bash/zsh)');
     } catch {}
 } else if (!IS_WINDOWS) {
     console.log('Tip: grok completions bash > ~/.local/share/bash-completion/completions/grok');

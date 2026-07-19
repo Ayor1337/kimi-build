@@ -119,7 +119,7 @@ pub fn load_system_managed_config() -> std::io::Result<toml::Value> {
 pub struct ManagedConfigLayer {
     pub value: toml::Value,
     pub path: std::path::PathBuf,
-    /// `true` for the root-owned system layer (`/etc/grok`), derived from the
+    /// `true` for the root-owned system layer (`/etc/kami`), derived from the
     /// load directory.
     pub is_system: bool,
 }

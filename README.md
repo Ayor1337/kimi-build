@@ -7,10 +7,10 @@
     <img alt="SpaceXAI logo" src="https://media.x.ai/v1/website/spacexai-symbol-black-transparent-6435cf42.png" width="96">
   </picture>
   <br>
-  Grok Build (<code>grok</code>)
+  Kimi Build (<code>kami</code>)
 </h1>
 
-**Grok Build** is SpaceXAI's terminal-based AI coding agent. It runs as a
+**Kimi Build** is SpaceXAI's terminal-based AI coding agent. It runs as a
 full-screen TUI that understands your codebase, edits files, executes shell
 commands, searches the web, and manages long-running tasks — interactively,
 headlessly for scripting/CI, or embedded in editors via the Agent Client
@@ -24,11 +24,11 @@ Protocol (ACP).
 [Contributing](#contributing) ·
 [License](#license)
 
-![Grok Build TUI](https://media.x.ai/v1/website/universe-tui-screenshot-6f7a0837.png)
+![Kimi Build TUI](https://media.x.ai/v1/website/universe-tui-screenshot-6f7a0837.png)
 
-**Learn more about Grok Build at [x.ai/cli](https://x.ai/cli)**
+**Learn more about Kimi Build at [x.ai/cli](https://x.ai/cli)**
 
-This repository contains the Rust source for the `grok` CLI/TUI and its agent
+This repository contains the Rust source for the `kami` CLI/TUI and its agent
 runtime. It is synced periodically from the SpaceXAI monorepo.
 
 A small `SOURCE_REV` file at the root records the full monorepo commit SHA
@@ -43,13 +43,27 @@ for the version of the code present in this tree.
 Prebuilt binaries are published for macOS, Linux, and Windows:
 
 ```sh
-curl -fsSL https://x.ai/cli/install.sh | bash   # macOS / Linux / Git Bash
-irm https://x.ai/cli/install.ps1 | iex          # Windows PowerShell
-grok --version
+curl -fsSL https://raw.githubusercontent.com/Ayor1337/kimi-build/main/crates/codegen/xai-grok-pager/scripts/install.sh | bash   # macOS / Linux / Git Bash
+irm https://raw.githubusercontent.com/Ayor1337/kimi-build/main/crates/codegen/xai-grok-pager/scripts/install.ps1 | iex          # Windows PowerShell
+kami --version
 ```
 
-See the [changelog](https://x.ai/build/changelog) for the latest fixes,
-features, and improvements in each release.
+Installers download the matching binary from this repository's
+[GitHub Releases](https://github.com/Ayor1337/kimi-build/releases). To install
+a specific version, pass it to the Bash installer or set `KAMI_VERSION` in
+PowerShell:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Ayor1337/kimi-build/main/crates/codegen/xai-grok-pager/scripts/install.sh | bash -s 0.2.105
+```
+
+```powershell
+$env:KAMI_VERSION="0.2.105"; irm https://raw.githubusercontent.com/Ayor1337/kimi-build/main/crates/codegen/xai-grok-pager/scripts/install.ps1 | iex
+```
+
+Maintainers publish a release by pushing a `v<semver>` tag. The GitHub Actions
+workflow builds the supported targets, uploads `kami-<version>-<platform>`
+assets, and publishes `version.txt` for the installers.
 
 ## Building from source
 
@@ -79,7 +93,7 @@ cargo check -p xai-grok-pager-bin            # fast validation
 ```
 
 The binary artifact is named `xai-grok-pager`; official installs ship it as
-`grok`. On first launch it opens your browser to authenticate — see the
+`kami`. On first launch it opens your browser to authenticate — see the
 [authentication guide](crates/codegen/xai-grok-pager/docs/user-guide/02-authentication.md).
 
 ## Documentation

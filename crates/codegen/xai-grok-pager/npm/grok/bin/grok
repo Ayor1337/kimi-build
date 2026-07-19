@@ -2,11 +2,11 @@
 // Thin trampoline: resolves the grok binary from the matching per-platform
 // optional dependency package and execs it.
 //
-// Falls back to bootstrapping the canonical ~/.grok/bin/grok-<version> symlink
+// Falls back to bootstrapping the canonical ~/.kami/bin/grok-<version> symlink
 // layout if postinstall hasn't run (e.g. npx, or postinstall failure).
 //
 // Binary location strategy (in priority order):
-//   1. ~/.grok/bin/grok        — canonical versioned symlink (postinstall.js)
+//   1. ~/.kami/bin/grok        — canonical versioned symlink (postinstall.js)
 //   2. @xai-official/grok-<platform>/bin/grok[.exe]      — decompressed sibling
 //   3. @xai-official/grok-<platform>/bin/grok[.exe].br   — brotli-compressed
 //

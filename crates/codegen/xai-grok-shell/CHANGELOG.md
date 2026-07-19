@@ -13,7 +13,7 @@
 
 - **Local shell tools** now see the same environment variables, aliases, and functions as your login shell.
 - **Syntax highlighting** in diffs and the file viewer no longer miscolors strings or comments that span multiple lines.
-- **Global rules** from ~/.grok/rules and compatible vendor homes are now discovered correctly.
+- **Global rules** from ~/.kami/rules and compatible vendor homes are now discovered correctly.
 - **Background tasks** that finish after you press Ctrl+C no longer automatically resume the model.
 - **Ctrl+\** out of the dashboard now returns you to the agent you came from.
 - **MCP OAuth logins** now succeed against servers that require the RFC 9207 issuer parameter in the callback.
@@ -271,7 +271,7 @@
 - **IME text input in Otty** no longer attaches unrelated clipboard images on every character.
 - **Rewind** now fully removes the selected turn from both scrollback and the model's conversation history.
 - **Queued prompts** now abort long blocking waits instead of waiting for the full timeout.
-- **File links and media** now work for worktree sessions under ~/.grok/worktrees/.
+- **File links and media** now work for worktree sessions under ~/.kami/worktrees/.
 - **Collapsed Read/Edit tool rows** now show only the filename instead of long absolute paths.
 - **Clipboard copies on Wayland** now succeed even when the terminal loses focus mid-copy.
 - **User messages queued** behind an auto-wake turn are no longer lost when the user presses Ctrl+C.
@@ -1084,7 +1084,7 @@
 - **Dashboard empty state** is now a single hint line; dispatch and peek placeholders appear only when unfocused.
 - **Fixed memory leaks** that could cause the CLI to use tens of gigabytes during long sessions with many tool calls.
 - **Login on SSH or headless machines** now tells you when the browser cannot be opened automatically and shows the URL to visit manually.
-- **Fixed git clone failures** on Windows when the CLI tries to clone marketplace plugins into ~/.grok.
+- **Fixed git clone failures** on Windows when the CLI tries to clone marketplace plugins into ~/.kami.
 
 ## Performance
 
@@ -1227,7 +1227,7 @@
 
 ## Features
 
-- **`grok --debug`** now produces per-session log files under ~/.grok/debug/ even with a leader process.
+- **`grok --debug`** now produces per-session log files under ~/.kami/debug/ even with a leader process.
 
 ## Bug Fixes
 

@@ -87,13 +87,13 @@ fn has_usable_token_covers_memory_and_disk() {
 #[test]
 fn auth_scope_uses_oauth2_when_present() {
     let cfg = GrokComConfig::default();
-    // Default config always has oauth2 set to the xAI defaults.
+    // Default config always has oauth2 set to the Kimi defaults.
     assert_eq!(
         cfg.auth_scope(),
         format!(
             "{}::{}",
             crate::auth::config::XAI_OAUTH2_ISSUER,
-            obfstr::obfstr!("b1a00492-073a-47ea-816f-4c329264a828"),
+            obfstr::obfstr!("17e5f671-d194-4dfb-9706-5516cb48c098"),
         )
     );
 }

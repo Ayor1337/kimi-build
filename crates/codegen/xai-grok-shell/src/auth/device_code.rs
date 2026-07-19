@@ -97,9 +97,11 @@ pub struct DeviceCode {
 struct DeviceCodeResponse {
     device_code: String,
     user_code: String,
-    verification_uri: String,
+    /// Kimi may omit this and return only `verification_uri_complete`.
+    verification_uri: Option<String>,
     verification_uri_complete: Option<String>,
-    expires_in: i64,
+    /// Kimi may omit this; falls back to [`MIN_DEVICE_CODE_EXPIRY_FALLBACK_SECS`].
+    expires_in: Option<i64>,
     interval: Option<i32>,
 }
 
@@ -139,8 +141,18 @@ pub async fn request_device_code(
     surface: ClientSurface,
 ) -> Result<DeviceCode, DeviceCodeError> {
     let client = crate::http::shared_client();
-    let url = format!("{}/oauth2/device/code", issuer.trim_end_matches('/'));
+    let url = format!(
+        "{}/api/oauth/device_authorization",
+        issuer.trim_end_matches('/')
+    );
     let scope_str = scopes.join(" ");
+
+    // Kimi's device-authorization endpoint accepts only `client_id`; send the
+    // scope parameter only when the provider config carries a non-empty set.
+    let mut form = vec![("client_id", client_id.to_owned())];
+    if !scope_str.is_empty() {
+        form.push(("scope", scope_str));
+    }
 
     let resp = with_alpha_test_key(
         client
@@ -150,11 +162,7 @@ pub async fn request_device_code(
             // Lets oauth2-provider separate human-completable logins from
             // headless automation in the device-flow funnel metrics.
             .header("x-grok-client-surface", surface.as_str())
-            .form(&[
-                ("client_id", client_id),
-                ("scope", scope_str.as_str()),
-                ("referrer", "grok-build"),
-            ]),
+            .form(&form),
         &url,
     )
     .send()
@@ -183,20 +191,32 @@ pub async fn request_device_code(
         .into());
     }
 
-    validate_verification_uri(&server_resp.verification_uri)?;
+    // Kimi may omit `verification_uri` (returning only the complete URI); fall
+    // back so the display logic always has a plain URI.
+    let verification_uri = match server_resp.verification_uri {
+        Some(uri) if !uri.is_empty() => uri,
+        _ => server_resp
+            .verification_uri_complete
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("Server returned no verification URI"))?,
+    };
+
+    validate_verification_uri(&verification_uri)?;
     if let Some(ref verification_uri_complete) = server_resp.verification_uri_complete {
         validate_verification_uri(verification_uri_complete)?;
     }
 
     Ok(DeviceCode {
-        verification_uri: server_resp.verification_uri,
+        verification_uri,
         verification_uri_complete: server_resp.verification_uri_complete,
         user_code: server_resp.user_code,
         device_code: server_resp.device_code,
         interval: server_resp
             .interval
             .unwrap_or(DEFAULT_DEVICE_POLL_INTERVAL_SECS),
-        expires_in: server_resp.expires_in,
+        expires_in: server_resp
+            .expires_in
+            .unwrap_or(MIN_DEVICE_CODE_EXPIRY_FALLBACK_SECS),
     })
 }
 
@@ -204,7 +224,7 @@ pub async fn request_device_code(
 
 /// Poll the token endpoint until the user approves (or denies / expires).
 ///
-/// On success, persists credentials to `~/.grok/auth.json` and returns
+/// On success, persists credentials to `~/.kami/auth.json` and returns
 /// the authenticated `GrokAuth`.
 ///
 /// Callers should have already displayed `device_code.verification_uri`
@@ -217,7 +237,7 @@ pub async fn complete_device_code_login(
     surface: ClientSurface,
 ) -> anyhow::Result<(GrokAuth, bool)> {
     let client = crate::http::shared_client();
-    let token_url = format!("{}/oauth2/token", issuer.trim_end_matches('/'));
+    let token_url = format!("{}/api/oauth/token", issuer.trim_end_matches('/'));
     let mut poll_interval = std::time::Duration::from_secs(device_code.interval.max(1) as u64);
     let deadline = tokio::time::Instant::now()
         + std::time::Duration::from_secs(
@@ -561,7 +581,7 @@ pub(crate) mod tests {
     #[test]
     fn build_auth_persists_credentials_without_proxy_fetch() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let grok_home = temp_dir.path().join(".grok");
+        let grok_home = temp_dir.path().join(".kami");
         std::fs::create_dir_all(&grok_home).unwrap();
         let auth_manager = auth_manager_with_grok_home(&grok_home, "http://127.0.0.1:9");
         let tokens = super::TokenOk {
@@ -604,7 +624,7 @@ pub(crate) mod tests {
     fn build_auth_seeds_team_metadata_from_access_token() {
         ensure_crypto_provider();
         let temp_dir = tempfile::tempdir().unwrap();
-        let grok_home = temp_dir.path().join(".grok");
+        let grok_home = temp_dir.path().join(".kami");
         std::fs::create_dir_all(&grok_home).unwrap();
         let auth_manager = auth_manager_with_grok_home(&grok_home, "http://127.0.0.1:9");
         let header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::HS256);
@@ -680,7 +700,7 @@ pub(crate) mod tests {
     fn assert_build_auth_rejected(cfg: GrokComConfig, token_principal: &str, expected_err: &str) {
         ensure_crypto_provider();
         let temp_dir = tempfile::tempdir().unwrap();
-        let grok_home = temp_dir.path().join(".grok");
+        let grok_home = temp_dir.path().join(".kami");
         std::fs::create_dir_all(&grok_home).unwrap();
         let auth_manager =
             Arc::new(AuthManager::new(&grok_home, cfg).with_proxy_base_url("http://127.0.0.1:9"));
@@ -724,7 +744,7 @@ pub(crate) mod tests {
             ..GrokComConfig::default()
         };
         let temp_dir = tempfile::tempdir().unwrap();
-        let grok_home = temp_dir.path().join(".grok");
+        let grok_home = temp_dir.path().join(".kami");
         std::fs::create_dir_all(&grok_home).unwrap();
         let auth_manager =
             Arc::new(AuthManager::new(&grok_home, cfg).with_proxy_base_url("http://127.0.0.1:9"));
@@ -765,7 +785,7 @@ pub(crate) mod tests {
 
     // ── complete_device_code_login poll loop ────────────────────────────────
 
-    /// Spawn a mock `/oauth2/token` server that serves `responses` in order,
+    /// Spawn a mock `/api/oauth/token` server that serves `responses` in order,
     /// repeating the last entry. Returns the issuer base URL.
     async fn spawn_token_server(
         responses: Vec<(u16, serde_json::Value)>,
@@ -776,7 +796,7 @@ pub(crate) mod tests {
         let counter = Arc::new(AtomicUsize::new(0));
         let responses = Arc::new(responses);
         let app = axum::Router::new().route(
-            "/oauth2/token",
+            "/api/oauth/token",
             axum::routing::post(move || {
                 let counter = counter.clone();
                 let responses = responses.clone();

@@ -59,7 +59,7 @@ pub fn get_mcp_server_config(name: &str) -> Option<McpServerConfig> {
 
 /// Get MCP server config by name, checking project-scoped configs first.
 /// Walks from cwd up to the git repo root checking `.grok/config.toml` at each level.
-/// Project-scoped `.grok/config.toml` entries override global `~/.grok/config.toml`
+/// Project-scoped `.grok/config.toml` entries override global `~/.kami/config.toml`
 /// entries entirely (no deep merge of individual fields).
 /// Closer directories (cwd) take priority over further ones (repo root).
 pub fn get_mcp_server_config_with_project(
@@ -187,7 +187,7 @@ pub fn worktree_pool_from_toml(root: &TomlValue) -> PoolConfig {
 /// Load MCP servers with project-scoped overrides from `.grok/config.toml`.
 ///
 /// Merge strategy:
-/// 1. Load MCP servers from global `~/.grok/config.toml`
+/// 1. Load MCP servers from global `~/.kami/config.toml`
 /// 2. Walk from git repo root down to `cwd`, loading `.grok/config.toml` at each level
 ///    (matching the convention used by skills and AGENTS.md discovery)
 /// 3. Each level's entries replace entries with the same name entirely
@@ -619,7 +619,7 @@ pub async fn save_mcp_disabled_tools(server_name: &str, disabled_tools: &[String
 
 /// Persist the enabled/disabled state for a single MCP server.
 ///
-/// Uses the top-level `disabled_mcp_servers` array in `~/.grok/config.toml`.
+/// Uses the top-level `disabled_mcp_servers` array in `~/.kami/config.toml`.
 /// For local servers that have a `[mcp_servers.X]` entry, also sets/clears
 /// the `enabled` field so `to_acp_mcp_server()` respects it at load time.
 pub async fn save_mcp_server_enabled(server_name: &str, enabled: bool) -> Result<()> {
@@ -669,7 +669,7 @@ pub async fn save_mcp_server_enabled(server_name: &str, enabled: bool) -> Result
     Ok(())
 }
 
-/// Upsert an MCP server entry in `~/.grok/config.toml`.
+/// Upsert an MCP server entry in `~/.kami/config.toml`.
 ///
 /// Creates or replaces `[mcp_servers.<name>]` with the given config.
 /// Also removes the server from `disabled_mcp_servers` if present (a newly
@@ -726,7 +726,7 @@ pub async fn save_mcp_server_config_at(
     Ok(())
 }
 
-/// Delete an MCP server entry from `~/.grok/config.toml`.
+/// Delete an MCP server entry from `~/.kami/config.toml`.
 ///
 /// Removes `[mcp_servers.<name>]`, cleans up `disabled_mcp_servers` and
 /// `[disabled_mcp_tools.<name>]` entries. Returns `true` if the entry existed.
@@ -1311,14 +1311,14 @@ fn config_path() -> PathBuf {
     crate::util::grok_home::grok_home().join("config.toml")
 }
 
-/// Path to the user-level config file (`~/.grok/config.toml`).
+/// Path to the user-level config file (`~/.kami/config.toml`).
 pub fn user_config_path() -> PathBuf {
     config_path()
 }
 
-/// Path to a project-level config file (`<dir>/.grok/config.toml`).
+/// Path to a project-level config file (`<dir>/.kami/config.toml`).
 pub fn project_config_path(dir: &std::path::Path) -> PathBuf {
-    dir.join(".grok").join("config.toml")
+    dir.join(".kami").join("config.toml")
 }
 
 /// True when the config file at `path` defines `[mcp_servers.<name>]`.
@@ -1688,8 +1688,8 @@ enabled = false
         let root = toml::from_str::<TomlValue>(
             r#"
 [skills]
-paths = ["~/.grok/skills", "~/.grok/skills/special/SKILL.md"]
-ignore = ["~/.grok/skills/noisy/SKILL.md"]
+paths = ["~/.kami/skills", "~/.kami/skills/special/SKILL.md"]
+ignore = ["~/.kami/skills/noisy/SKILL.md"]
 "#,
         )
         .unwrap();
@@ -1702,9 +1702,9 @@ ignore = ["~/.grok/skills/noisy/SKILL.md"]
             .unwrap_or_default();
         assert_eq!(
             cfg.paths,
-            vec!["~/.grok/skills", "~/.grok/skills/special/SKILL.md"]
+            vec!["~/.kami/skills", "~/.kami/skills/special/SKILL.md"]
         );
-        assert_eq!(cfg.ignore, vec!["~/.grok/skills/noisy/SKILL.md"]);
+        assert_eq!(cfg.ignore, vec!["~/.kami/skills/noisy/SKILL.md"]);
     }
 
     #[test]
@@ -1880,7 +1880,7 @@ expose_image_base64 = true
     #[test]
     fn mcp_json_all_toml_names_includes_disabled() {
         let tmp = tempfile::tempdir().unwrap();
-        let grok_dir = tmp.path().join(".grok");
+        let grok_dir = tmp.path().join(".kami");
         std::fs::create_dir_all(&grok_dir).unwrap();
         std::fs::write(
             grok_dir.join("config.toml"),

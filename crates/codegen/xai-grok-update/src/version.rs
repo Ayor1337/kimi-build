@@ -11,7 +11,7 @@ use xai_grok_shell::util::grok_home::grok_home;
 
 const TTL_SECONDS_BEFORE_AUTO_UPDATE: Duration = Duration::from_secs(60 * 30);
 const NPM_PACKAGE: &str = "@xai-official/grok";
-pub const GH_RELEASE_REPO: &str = "xai-org-shared/grok-build";
+pub const GH_RELEASE_REPO: &str = "Ayor1337/kimi-build";
 
 /// Primary CLI base URL: Cloudflare-fronted x.ai endpoint with edge caching
 /// for binaries and origin-respecting no-cache for channel pointers.
@@ -35,7 +35,7 @@ pub(crate) const CLI_BASE_URLS: &[&str] = &[CLI_BASE_URL_PRIMARY, CLI_BASE_URL_F
 pub struct UpdateConfig {
     /// Chat API proxy base URL (versioned `https://cli-chat-proxy.grok.com/v1` endpoint).
     pub proxy_base_url: String,
-    /// Auth scope key for `~/.grok/auth.json`.
+    /// Auth scope key for `~/.kami/auth.json`.
     pub auth_scope: String,
     /// Enterprise deployment key (GROK_DEPLOYMENT_KEY).
     pub deployment_key: Option<String>,
@@ -171,56 +171,33 @@ async fn fetch_npm_tag(tag: &str, npm_registry: Option<&str>) -> Result<String> 
     }
 }
 
-/// Fetch the latest version from GitHub Releases using `gh release list`.
-/// For alpha channel, fetches both pre-release and stable-only, returns the
-/// semver-greater — `gh release list --limit 1` orders by publication date,
-/// not semver, so we need both to guarantee correctness.
+/// Fetch the latest stable version from the release metadata asset.
 #[doc(hidden)]
 pub async fn fetch_gh_release_version(channel: &str) -> Result<String> {
-    if channel == "alpha" {
-        let (with_pre, stable_only) = tokio::try_join!(
-            fetch_gh_release_latest(false),
-            fetch_gh_release_latest(true),
-        )?;
-        return semver_max(&with_pre, &stable_only);
-    }
-    fetch_gh_release_latest(true).await
+    let base_url = format!("https://github.com/{}/releases", GH_RELEASE_REPO);
+    fetch_gh_release_version_from_base(channel, &base_url).await
 }
 
-async fn fetch_gh_release_latest(exclude_pre: bool) -> Result<String> {
-    let mut args = vec![
-        "release",
-        "list",
-        "--repo",
-        GH_RELEASE_REPO,
-        "--limit",
-        "1",
-        "--exclude-drafts",
-        "--json",
-        "tagName",
-        "--jq",
-        ".[0].tagName",
-    ];
-    if exclude_pre {
-        args.push("--exclude-pre-releases");
-    }
-    let mut cmd = Command::new("gh");
-    cmd.args(&args).stdin(std::process::Stdio::null());
-    xai_grok_tools::util::detach_command(&mut cmd);
-    cmd.envs(xai_grok_tools::util::pager_env());
-    let output = cmd.output().await?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("gh release list failed: {}", stderr.trim());
+#[doc(hidden)]
+pub async fn fetch_gh_release_version_from_base(channel: &str, base_url: &str) -> Result<String> {
+    if channel != "stable" {
+        anyhow::bail!("GitHub Releases currently supports only the stable channel");
     }
 
-    let tag = String::from_utf8(output.stdout)?.trim().to_string();
-    // Tags are formatted as "v0.1.141", strip the leading "v"
-    let version = tag.strip_prefix('v').unwrap_or(&tag).to_string();
-    if version.is_empty() {
-        anyhow::bail!("No releases found in {}", GH_RELEASE_REPO);
-    }
+    let url = format!("{}/latest/download/version.txt", base_url.trim_end_matches('/'));
+    let version = reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()?
+        .get(&url)
+        .send()
+        .await?
+        .error_for_status()?
+        .text()
+        .await?
+        .trim()
+        .to_string();
+    semver::Version::parse(&version)
+        .map_err(|_| anyhow::anyhow!("invalid version metadata from {}: '{}'", url, version))?;
     Ok(version)
 }
 
@@ -393,7 +370,7 @@ pub async fn write_version_cache(version: &str, stable_version: Option<&str>) {
 ///
 /// - `"npm"` — uses `npm view` against the public registry.
 /// - `"internal"` — reads the channel pointer from the public GCS bucket.
-/// - `"gh-release"` — uses `gh release list` against GitHub Releases.
+/// - `"gh-release"` — reads `version.txt` from the latest GitHub Release.
 pub async fn get_latest_version(installer: &str, config: &UpdateConfig) -> Result<String> {
     let version = fetch_latest_version(installer, config).await?;
     let stable_ptr = try_fetch_stable_pointer().await;
@@ -417,7 +394,7 @@ pub async fn is_version_cache_fresh() -> bool {
 pub use xai_grok_version::installed as get_installed_grok_version;
 
 /// Version of the managed grok binary currently on disk, read from the
-/// `~/.grok/bin/grok` symlink target (`../downloads/grok-<version>-<platform>`)
+/// `~/.kami/bin/grok` symlink target (`../downloads/grok-<version>-<platform>`)
 /// without exec'ing anything.
 ///
 /// Concurrent updaters (TUI background download, leader hourly checker,
@@ -427,7 +404,7 @@ pub use xai_grok_version::installed as get_installed_grok_version;
 ///
 /// Returns `None` when there is no parseable managed symlink (Windows
 /// copy-based installs, dev builds) or when the symlink is DANGLING — a
-/// link whose target binary was deleted (e.g. manual `~/.grok/downloads`
+/// link whose target binary was deleted (e.g. manual `~/.kami/downloads`
 /// cleanup) must not report an installed version, or every updater would
 /// claim "already up to date" forever while no runnable binary exists.
 /// NOTE: the symlink existing does not prove the *active installer*
@@ -443,7 +420,9 @@ pub fn installed_on_disk_version() -> Option<String> {
         // metadata() follows the symlink: Err means the target is gone
         // (dangling link) and the version it names is not actually on disk.
         std::fs::metadata(&app).ok()?;
-        version_from_versioned_binary_name(target.file_name()?.to_str()?, "grok")
+        let name = target.file_name()?.to_str()?;
+        version_from_versioned_binary_name(name, "kami")
+            .or_else(|| version_from_versioned_binary_name(name, "grok"))
     }
     #[cfg(not(unix))]
     {
@@ -501,7 +480,7 @@ pub(crate) async fn try_fetch_stable_pointer() -> Option<String> {
     .unwrap_or(None)
 }
 
-/// Read the cached stable version from `~/.grok/version.json` (sync, for display).
+/// Read the cached stable version from `~/.kami/version.json` (sync, for display).
 ///
 /// Returns `None` if the file doesn't exist, can't be parsed, or has no
 /// `stable_version` field (e.g. written by an older binary).
@@ -545,7 +524,7 @@ pub fn channel_name() -> Option<&'static str> {
 /// Channel label derived from the cached stable pointer.
 ///
 /// Compares the compiled-in `VERSION` against the stable pointer stored in
-/// `~/.grok/version.json` (written by the auto-updater):
+/// `~/.kami/version.json` (written by the auto-updater):
 /// - `" [alpha]"` when the current version is ahead of stable,
 /// - `" [stable]"` when at or behind stable,
 /// - `""` when no cached pointer is available (first launch, old cache format).

@@ -33,6 +33,10 @@ pub struct CreditBalance {
     /// `Some(true)` = unified pool / buy-credits UX; `Some(false)` = legacy
     /// on-demand / PAYG UX.
     pub is_unified_billing_user: Option<bool>,
+    /// Extra quota windows from the provider (e.g. Kimi's 5h limit), each
+    /// rendered as its own line in the `/usage` summary. Empty for providers
+    /// without per-window quotas.
+    pub quota_rows: Vec<xai_grok_shell::extensions::billing::QuotaRow>,
 }
 
 impl CreditBalance {
@@ -113,6 +117,20 @@ pub fn format_usage_summary(balance: &CreditBalance, autotopup: Option<&AutoTopu
     )];
     if let Some(reset) = &balance.period_end_display {
         lines.push(format!("Next reset: {reset}"));
+    }
+
+    // Extra provider quota windows (e.g. Kimi's 5h limit), one line each.
+    for row in &balance.quota_rows {
+        let pct = if row.limit > 0 {
+            (row.used as f64 / row.limit as f64 * 100.0).floor() as i64
+        } else {
+            0
+        };
+        let mut line = format!("{}: {pct}%", row.label);
+        if let Some(hint) = &row.reset_hint {
+            line.push_str(&format!(" ({hint})"));
+        }
+        lines.push(line);
     }
 
     // Billing stores credit / top-up amounts as negative cents (accounting
@@ -295,6 +313,7 @@ mod tests {
             prepaid_balance_cents: None,
             period_type: None,
             is_unified_billing_user: None,
+            quota_rows: vec![],
         }
     }
 

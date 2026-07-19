@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 /// Directories that contain skill definitions (`.grok/skills/`, `.agents/skills/`,
 /// `.claude/skills/`, `.cursor/skills/`). Shared between startup skill discovery
 /// and runtime `SkillDiscoveryReminder`.
-pub const SKILL_CONFIG_DIRS: &[&str] = &[".grok", ".agents", ".claude", ".cursor"];
+pub const SKILL_CONFIG_DIRS: &[&str] = &[".kami", ".agents", ".claude", ".cursor"];
 
 use crate::implementations::skills::discovery;
 use crate::implementations::skills::types::SkillScope;
@@ -131,7 +131,7 @@ impl Reminder for SkillDiscoveryReminder {
         // SKILL.md file, register it immediately. The normal upward-walk
         // discovery cannot find these because it looks for `.grok/skills/`
         // sub-directories in *ancestor* dirs, and user-scope skills
-        // (~/.grok/) are outside the git root so the walk breaks early.
+        // (~/.kami/) are outside the git root so the walk breaks early.
         if target_path.file_name().is_some_and(|n| n == "SKILL.md")
             && Self::is_in_supported_skills_dir(target_path)
         {

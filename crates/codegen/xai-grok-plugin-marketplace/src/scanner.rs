@@ -319,7 +319,7 @@ mod tests {
     #[test]
     fn url_sourced_entry_carries_keywords() {
         let dir = tempfile::tempdir().unwrap();
-        let grok_dir = dir.path().join(".grok-plugin");
+        let grok_dir = dir.path().join(".kami-plugin");
         std::fs::create_dir_all(&grok_dir).unwrap();
         std::fs::write(
             grok_dir.join("marketplace.json"),
@@ -353,7 +353,7 @@ mod tests {
     #[test]
     fn url_sourced_entry_with_path_sets_remote_subdir() {
         let dir = tempfile::tempdir().unwrap();
-        let grok_dir = dir.path().join(".grok-plugin");
+        let grok_dir = dir.path().join(".kami-plugin");
         std::fs::create_dir_all(&grok_dir).unwrap();
         std::fs::write(
             grok_dir.join("marketplace.json"),
@@ -441,7 +441,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         make_plugin(dir.path(), "grok-plugin", "1.0.0");
 
-        let grok_dir = dir.path().join(".grok-plugin");
+        let grok_dir = dir.path().join(".kami-plugin");
         std::fs::create_dir_all(&grok_dir).unwrap();
         std::fs::write(
             grok_dir.join("marketplace.json"),
@@ -513,7 +513,7 @@ mod tests {
     }
 
     fn write_grok_file(dir: &Path, file: &str, content: &str) {
-        let grok_dir = dir.join(".grok-plugin");
+        let grok_dir = dir.join(".kami-plugin");
         std::fs::create_dir_all(&grok_dir).unwrap();
         std::fs::write(grok_dir.join(file), content).unwrap();
     }

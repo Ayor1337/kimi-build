@@ -149,8 +149,8 @@ pub struct PromptContext {
     #[serde(default = "default_system_prompt_label")]
     pub system_prompt_label: String,
 }
-/// Default identity on trim-tool-descriptions (`You are Grok released by xAI`).
-pub const DEFAULT_SYSTEM_PROMPT_LABEL: &str = "Grok";
+/// Default identity on trim-tool-descriptions (`You are Kimi released by MoonshotAI`).
+pub const DEFAULT_SYSTEM_PROMPT_LABEL: &str = "Kimi";
 fn default_system_prompt_label() -> String {
     DEFAULT_SYSTEM_PROMPT_LABEL.to_string()
 }
@@ -1061,7 +1061,7 @@ mod tests {
     #[test]
     fn test_agents_md_paths_use_display_cwd_in_rendered_section() {
         let display_path = "/home/user/my-project";
-        let overlay_path = "/root/.grok/worktrees/my-project/ab-123-a-overlay";
+        let overlay_path = "/root/.kami/worktrees/my-project/ab-123-a-overlay";
         let ctx = PromptContext {
             agents_md_files: vec![AgentConfigFile {
                 file_name: "AGENTS.md".to_string(),
@@ -1229,7 +1229,7 @@ mod tests {
             ("plan", plan),
         ] {
             assert!(
-                !prompt.contains("You are a Grok Build agent"),
+                !prompt.contains("You are a Kimi Build agent"),
                 "{name} prompt should not duplicate base template identity"
             );
         }

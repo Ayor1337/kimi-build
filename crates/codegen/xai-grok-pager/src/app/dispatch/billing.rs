@@ -30,10 +30,10 @@ pub(super) fn is_max_tier(subscription_tier: Option<&str>) -> bool {
 }
 
 /// URL for upgrading the subscription tier.
-pub(crate) const UPSELL_URL_UPGRADE: &str = "https://grok.com/supergrok?referrer=grok-build";
+pub(crate) const UPSELL_URL_UPGRADE: &str = "https://www.kimi.com/code/console";
 
 /// URL for managing pay-as-you-go / on-demand spending / purchasing credits.
-pub(crate) const UPSELL_URL_PAYG: &str = "https://grok.com?_s=usage";
+pub(crate) const UPSELL_URL_PAYG: &str = "https://www.kimi.com/code/console";
 
 /// Billing mode for credit-limit upsell copy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
