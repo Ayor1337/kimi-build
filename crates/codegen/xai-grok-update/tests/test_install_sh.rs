@@ -47,7 +47,8 @@ fn host_platform() -> String {
 }
 
 const GOOD_SCRIPT: &str = "#!/bin/sh\nexit 0\n";
-const INSTALLER_BLOCK_START: &str = "# >>> grok installer >>>";
+const KAMI_INSTALLER_MARKER: &str = "# Kimi Build";
+const LEGACY_INSTALLER_MARKER: &str = "# >>> grok installer >>>";
 
 /// Write a fake `curl` that intercepts every download `install.sh` performs.
 /// `$FAKE_MODE` (full|truncate|garbage) selects the corruption.
@@ -96,33 +97,36 @@ fn seed_previous_good(home: &Path, platform: &str) -> PathBuf {
     let bin = home.join(".kami").join("bin");
     std::fs::create_dir_all(&downloads).unwrap();
     std::fs::create_dir_all(&bin).unwrap();
-    let prev = downloads.join(format!("grok-{platform}"));
+    let prev = downloads.join(format!("kami-0.1.180-{platform}"));
     std::fs::write(&prev, GOOD_SCRIPT).unwrap();
     std::fs::set_permissions(&prev, std::fs::Permissions::from_mode(0o755)).unwrap();
-    let link = bin.join("grok");
-    let _ = std::fs::remove_file(&link);
-    std::os::unix::fs::symlink(format!("../downloads/grok-{platform}"), &link).unwrap();
+    for name in ["kami", "grok", "agent"] {
+        let link = bin.join(name);
+        let _ = std::fs::remove_file(&link);
+        std::os::unix::fs::symlink(format!("../downloads/kami-0.1.180-{platform}"), &link)
+            .unwrap();
+    }
     dunce::canonicalize(&prev).unwrap()
 }
 
 /// Re-resolve `$BIN_DIR/grok` from disk and re-run it: the active grok must
 /// always execute, and never be a `.tmp`/partial file.
-fn assert_active_grok_runs(home: &Path) {
-    let link = home.join(".kami").join("bin").join("grok");
-    assert!(link.is_symlink(), "grok must remain a symlink");
+fn assert_active_kami_runs(home: &Path) {
+    let link = home.join(".kami").join("bin").join("kami");
+    assert!(link.is_symlink(), "kami must remain a symlink");
     let resolved =
-        dunce::canonicalize(&link).unwrap_or_else(|e| panic!("grok symlink dangles: {e}"));
+        dunce::canonicalize(&link).unwrap_or_else(|e| panic!("kami symlink dangles: {e}"));
     let name = resolved.file_name().unwrap().to_string_lossy().to_string();
     assert!(
         !name.contains(".tmp"),
-        "active grok must not be a temp file: {name}"
+        "active kami must not be a temp file: {name}"
     );
     let ok = Command::new(&resolved)
         .arg("--version")
         .status()
         .map(|s| s.success())
         .unwrap_or(false);
-    assert!(ok, "active grok must run: {}", resolved.display());
+    assert!(ok, "active kami must run: {}", resolved.display());
 }
 
 fn run_installer(install_sh: &Path, home: &Path, fakebin: &Path, mode: &str, shell: &str) -> bool {
@@ -143,7 +147,7 @@ fn run_installer(install_sh: &Path, home: &Path, fakebin: &Path, mode: &str, she
 }
 
 fn installer_block_count(body: &str) -> usize {
-    body.matches(INSTALLER_BLOCK_START).count()
+    body.matches(KAMI_INSTALLER_MARKER).count() + body.matches(LEGACY_INSTALLER_MARKER).count()
 }
 
 fn assert_single_installer_block(path: &Path, preserved: Option<&str>) {
@@ -154,7 +158,7 @@ fn assert_single_installer_block(path: &Path, preserved: Option<&str>) {
     assert_eq!(
         n,
         1,
-        "{} must contain exactly one grok installer block, got {n}:\n{body}",
+        "{} must contain exactly one installer block, got {n}:\n{body}",
         path.display()
     );
     if let Some(marker) = preserved {
@@ -296,11 +300,11 @@ fn run_shell_rc_case(case: &ShellRcCase) {
         }
     }
 
-    assert_active_grok_runs(&home_path);
+    assert_active_kami_runs(&home_path);
 }
 
 #[test]
-fn install_sh_blitz_keeps_grok_runnable_under_corruption() {
+fn install_sh_blitz_keeps_kami_runnable_under_corruption() {
     let Some(install_sh) = install_sh_path() else {
         eprintln!("skipping: install.sh not found relative to crate; run under cargo");
         return;
@@ -332,9 +336,9 @@ fn install_sh_blitz_keeps_grok_runnable_under_corruption() {
         );
 
         // The invariant holds regardless of which path was taken: the active
-        // grok always runs (new good binary on success, previous-good on
+        // kami always runs (new good binary on success, previous-good on
         // rejection).
-        assert_active_grok_runs(home.path());
+        assert_active_kami_runs(home.path());
     }
 }
 

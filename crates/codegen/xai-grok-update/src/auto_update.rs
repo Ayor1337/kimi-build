@@ -25,13 +25,13 @@ pub enum UpdateRunMode {
 
 const PROMPT_UPDATE_NOW: &str = "Update now? [Y/n/d]";
 const MSG_AUTO_UPDATE_BACKGROUND: &str = "Auto-update running in background.";
-const MSG_RUN_UPDATE_MANUAL: &str = "Run `grok update` to get the latest version.";
+const MSG_RUN_UPDATE_MANUAL: &str = "Run `kami update` to get the latest version.";
 /// Manual-install one-liner for this platform's bootstrap installer.
 fn manual_install_cmd() -> &'static str {
     if cfg!(windows) {
-        "irm https://x.ai/cli/install.ps1 | iex"
+        "irm https://raw.githubusercontent.com/Ayor1337/kimi-build/main/crates/codegen/xai-grok-pager/scripts/install.ps1 | iex"
     } else {
-        "curl -fsSL https://x.ai/cli/install.sh | bash"
+        "curl -fsSL https://raw.githubusercontent.com/Ayor1337/kimi-build/main/crates/codegen/xai-grok-pager/scripts/install.sh | bash"
     }
 }
 
@@ -39,7 +39,7 @@ fn manual_install_cmd() -> &'static str {
 fn reinstall_hint(installer: &str) -> String {
     match installer {
         "npm" => "Please reinstall via npm:\n  npm i -g @xai-official/grok".to_string(),
-        "gh-release" => "Please reinstall via GitHub Releases:\n  gh release download --repo xai-org-shared/grok-build --pattern 'grok-*' --output grok && chmod +x grok".to_string(),
+        "gh-release" => format!("Please reinstall via:\n  {}", manual_install_cmd()),
         _ => format!("Please reinstall via:\n  {}", manual_install_cmd()),
     }
 }
@@ -1322,10 +1322,11 @@ fn relative_symlink_target(target: &std::path::Path, link: &std::path::Path) -> 
     target.to_path_buf()
 }
 
-/// Swap `~/.kami/bin/{grok,agent}` to point at `binary_path`. Returns the
-/// `grok` link path (for [`regenerate_completions`]).
+/// Swap `~/.kami/bin/{kami,grok,agent}` to point at `binary_path`. Returns the
+/// `kami` link path (for [`regenerate_completions`]).
 ///
-/// `grok` and `agent` are first-class entry points that the bootstrap
+/// `kami` is the public entry point; `grok` and `agent` remain compatibility
+/// entry points. The bootstrap
 /// installers (`install.sh`, `install.ps1`, `install-enterprise.sh`)
 /// maintain in lockstep, and so must the updater — otherwise `grok update`
 /// leaves `agent` pinned at the previous version.
@@ -1344,14 +1345,16 @@ async fn swap_managed_bin_links(
     binary_path: &std::path::Path,
     bin_dir: &std::path::Path,
 ) -> Result<std::path::PathBuf> {
+    let kami_name = if cfg!(windows) { "kami.exe" } else { "kami" };
     let grok_name = if cfg!(windows) { "grok.exe" } else { "grok" };
     let agent_name = if cfg!(windows) { "agent.exe" } else { "agent" };
+    let kami_link = bin_dir.join(kami_name);
     let grok_link = bin_dir.join(grok_name);
     let agent_link = bin_dir.join(agent_name);
-    let link_paths: [std::path::PathBuf; 2] = [grok_link.clone(), agent_link];
+    let link_paths: [std::path::PathBuf; 3] = [kami_link.clone(), grok_link, agent_link];
 
-    // Capture every link up-front so a 2nd-link capture failure can't
-    // strand the 1st mid-swap.
+    // Capture every link up-front so a later capture failure cannot strand an
+    // earlier entry point mid-swap.
     let mut captured: Vec<LinkRollback> = Vec::with_capacity(link_paths.len());
     for path in &link_paths {
         match LinkRollback::capture(path).await {
@@ -1417,7 +1420,7 @@ async fn swap_managed_bin_links(
     for cap in &captured {
         cap.cleanup().await;
     }
-    Ok(grok_link)
+    Ok(kami_link)
 }
 
 /// Snapshot of a managed-bin link's prior state for rollback in
@@ -1956,56 +1959,18 @@ async fn agent_exe_differs(
     }
 }
 
-/// Download a single asset from a GitHub release via `gh release download`.
+/// Download a single asset from a public GitHub release.
 async fn gh_release_download(tag: &str, pattern: &str, dest: &std::path::Path) -> Result<()> {
-    let pb = ProgressBar::new_spinner();
-    pb.set_style(
-        ProgressStyle::default_spinner()
-            .template("  {spinner:.cyan} Downloading from GitHub Releases...")
-            .unwrap(),
-    );
-    pb.enable_steady_tick(Duration::from_millis(100));
-
-    let mut cmd = tokio::process::Command::new("gh");
-    cmd.args([
-        "release",
-        "download",
-        tag,
-        "--repo",
+    let url = format!(
+        "https://github.com/{}/releases/download/{}/{}",
         crate::version::GH_RELEASE_REPO,
-        "--pattern",
-        pattern,
-        "--output",
-        &dest.to_string_lossy(),
-        "--clobber",
-    ])
-    .stdin(Stdio::null())
-    .stdout(Stdio::null())
-    .stderr(Stdio::piped());
-    xai_grok_tools::util::detach_command(&mut cmd);
-    cmd.envs(xai_grok_tools::util::pager_env());
-    let output = cmd.output().await?;
-
-    pb.finish_and_clear();
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!(
-            "gh release download failed for {} tag {} from {}: {}",
-            pattern,
-            tag,
-            crate::version::GH_RELEASE_REPO,
-            stderr.trim()
-        );
-    }
-    Ok(())
+        tag,
+        pattern
+    );
+    download_with_progress(&url, dest).await
 }
 
-/// Download and install grok from GitHub Releases (xai-org-shared/grok-build).
-///
-/// Uses `gh release download` to fetch the binary matching the current platform.
-/// This works anywhere the `gh` CLI is authenticated, without needing npm or
-/// internal network access.
+/// Download and install Kimi Build from this project's GitHub Releases.
 async fn install_gh_release(target: Option<&str>) -> Result<()> {
     let (os, arch) = detect_platform()?;
     let platform = format!("{}-{}", os, arch);
@@ -2021,12 +1986,13 @@ async fn install_gh_release(target: Option<&str>) -> Result<()> {
     tokio::fs::create_dir_all(&download_dir).await?;
     tokio::fs::create_dir_all(&bin_dir).await?;
 
-    let binary_name = format!("grok-{}-{}", version, platform);
+    let suffix = if cfg!(windows) { ".exe" } else { "" };
+    let binary_name = format!("kami-{}-{}{}", version, platform, suffix);
     let binary_path = download_dir.join(&binary_name);
     let tag = format!("v{}", version);
 
     eprintln!(
-        "  Downloading grok v{} ({}) from GitHub Releases...",
+        "  Downloading Kimi Build v{} ({}) from GitHub Releases...",
         version, platform
     );
 
@@ -2039,7 +2005,7 @@ async fn install_gh_release(target: Option<&str>) -> Result<()> {
         tokio::fs::set_permissions(&binary_path, std::fs::Permissions::from_mode(0o755)).await?;
     }
 
-    // Atomic swap of ~/.kami/bin/{grok,agent} -> downloaded binary.
+    // Atomic swap of ~/.kami/bin/{kami,grok,agent} -> downloaded binary.
     swap_managed_bin_links(&binary_path, &bin_dir).await?;
 
     // Update grok-latest -> versioned binary so any existing symlinks that route
@@ -2074,7 +2040,7 @@ async fn install_gh_release(target: Option<&str>) -> Result<()> {
     eprintln!();
 
     // Clean up old versioned binaries (keeps current + 1 previous).
-    cleanup_old_downloads(&download_dir, "grok", &version).await;
+    cleanup_old_downloads(&download_dir, "kami", &version).await;
     cleanup_old_downloads(&download_dir, "grok-pager", &version).await;
 
     // Persist installer to config.toml so future runs auto-detect gh-release.
@@ -3454,14 +3420,14 @@ mod tests {
     }
 
     #[test]
-    fn test_reinstall_hint_gh_release_mentions_gh_command() {
+    fn test_reinstall_hint_gh_release_mentions_project_installer() {
         let hint = reinstall_hint("gh-release");
         assert!(
-            hint.contains("gh release download"),
-            "should suggest gh release download: {hint}"
+            hint.contains("raw.githubusercontent.com"),
+            "should suggest the project installer: {hint}"
         );
         assert!(
-            hint.contains("xai-org-shared/grok-build"),
+            hint.contains("Ayor1337/kimi-build"),
             "should name the repo: {hint}"
         );
     }

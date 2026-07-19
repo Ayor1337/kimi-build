@@ -1,447 +1,144 @@
-#!/bin/bash
-#
-# Grok CLI installer — https://x.ai/cli/install.sh
-#
-# Auth: GROK_DEPLOYMENT_KEY (takes precedence) or ~/.kami/auth.json from `grok login`.
-# Env: GROK_CHANNEL (stable|alpha|enterprise, default: stable), GROK_BIN_DIR, GROK_PROXY_URL
-#
-# Usage:
-#   curl -fsSL https://x.ai/cli/install.sh | bash            # latest stable
-#   curl -fsSL https://x.ai/cli/install.sh | bash -s 0.1.42  # specific version
-#   GROK_DEPLOYMENT_KEY=<key> bash <(curl -fsSL https://x.ai/cli/install.sh)
-#
-# Windows: run under Git for Windows / MSYS2 Bash (same curl | bash flow); WSL
-# uses the Linux binary.
+#!/usr/bin/env bash
+# Kimi Build installer for macOS, Linux, Git Bash, MSYS2, and Cygwin.
 
 set -e
 
-TARGET="$1"
+REPOSITORY="${KAMI_REPOSITORY:-Ayor1337/kimi-build}"
+RELEASES_URL="https://github.com/${REPOSITORY}/releases"
+VERSION="${1:-${KAMI_VERSION:-}}"
+KAMI_HOME="${KAMI_HOME:-$HOME/.kami}"
+DOWNLOAD_DIR="$KAMI_HOME/downloads"
+BIN_DIR="${KAMI_BIN_DIR:-$KAMI_HOME/bin}"
 
-if [[ -n "$TARGET" ]] && [[ ! "$TARGET" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9._]+)?$ ]]; then
-    echo "Invalid version format: $TARGET (expected X.Y.Z or X.Y.Z-suffix)" >&2
-    exit 1
-fi
-
-DOWNLOADER=""
 if command -v curl >/dev/null 2>&1; then
-    DOWNLOADER="curl"
+    download() { curl -fsSL --retry 3 -o "$2" "$1"; }
+    download_stdout() { curl -fsSL --retry 3 "$1"; }
 elif command -v wget >/dev/null 2>&1; then
-    DOWNLOADER="wget"
+    download() { wget -q -O "$2" "$1"; }
+    download_stdout() { wget -q -O - "$1"; }
 else
-    echo "Either curl or wget is required but neither is installed" >&2
+    echo "Error: curl or wget is required." >&2
     exit 1
-fi
-
-download_file() {
-    local url="$1" output="$2"
-    if [ "$DOWNLOADER" = "curl" ]; then
-        if [ -n "$output" ]; then
-            curl -fsSL -o "$output" "$url"
-        else
-            curl -fsSL "$url"
-        fi
-    else
-        if [ -n "$output" ]; then
-            wget -q -O "$output" "$url"
-        else
-            wget -q -O - "$url"
-        fi
-    fi
-}
-
-# Parallel byte-range download. Falls back to single-connection download_file
-# whenever HEAD lacks Content-Length, the file is small (<16 MiB), curl is
-# unavailable, or any chunk fetch / concat fails.
-download_file_parallel() {
-    local url="$1" output="$2"
-    if [ "$DOWNLOADER" != "curl" ]; then
-        download_file "$url" "$output"
-        return
-    fi
-    local size
-    size=$(curl -fsSL --head "$url" 2>/dev/null | awk -F'[: \r\n]+' 'tolower($1)=="content-length"{print $2; exit}')
-    if [ -z "$size" ] || ! [ "$size" -ge 16777216 ] 2>/dev/null; then
-        download_file "$url" "$output"
-        return
-    fi
-    local n=8
-    local chunk_size=$(( (size + n - 1) / n ))
-    local tmpdir
-    tmpdir=$(mktemp -d 2>/dev/null) || { download_file "$url" "$output"; return; }
-    local pids=() i start end
-    for i in $(seq 0 $((n - 1))); do
-        start=$((i * chunk_size))
-        end=$((start + chunk_size - 1))
-        [ $end -ge $size ] && end=$((size - 1))
-        curl -fsSL -r "${start}-${end}" -o "${tmpdir}/$(printf 'chunk.%03d' "$i")" "$url" &
-        pids+=($!)
-    done
-    local all_ok=true pid
-    for pid in "${pids[@]}"; do
-        wait "$pid" || all_ok=false
-    done
-    if [ "$all_ok" = true ] && cat "${tmpdir}"/chunk.* > "$output" 2>/dev/null; then
-        rm -rf "$tmpdir"
-        return 0
-    fi
-    rm -rf "$tmpdir"
-    download_file "$url" "$output"
-}
-
-# Return 0 if a HEAD request for the URL gets HTTP 404.
-is_not_found() {
-    local url="$1" code
-    if [ "$DOWNLOADER" = "curl" ]; then
-        code=$(curl -o /dev/null -sSL -w '%{http_code}' --head "$url" 2>/dev/null) || true
-    else
-        code=$(wget --server-response --spider "$url" 2>&1 | awk '/HTTP\//{print $2}' | tail -1) || true
-    fi
-    [ "$code" = "404" ]
-}
-
-# JSON field extractor — extract a top-level string value using sed.
-json_get() {
-    local json="$1" field="$2"
-    # Extract value (handling \" inside strings), then unescape JSON sequences.
-    printf '%s' "$json" | sed -n -E 's/.*"'"$field"'"[[:space:]]*:[[:space:]]*"(([^"\\]|\\.)*)".*/\1/p' | head -1 \
-        | sed -e 's/\\"/"/g' -e 's/\\n/\'$'\n''/g' -e 's/\\t/\'$'\t''/g' -e 's/\\\\/\\/g'
-}
-
-# Read a token from ~/.kami/auth.json for the given scope key.
-# Format: {"scope_url": {"key": "token"}, ...}
-read_grok_token() {
-    local auth_file="$HOME/.kami/auth.json"
-    local scope="$1"
-    [ -f "$auth_file" ] || return 1
-    # Flatten to one line then extract: find the scope, then the "key" value after it
-    tr -d '\n' < "$auth_file" | sed -n 's|.*"'"$scope"'"[[:space:]]*:[[:space:]]*{[^}]*"key"[[:space:]]*:[[:space:]]*"\([^"]*\)".*|\1|p' | head -1
-}
-
-# Resolve auth: GROK_DEPLOYMENT_KEY > OIDC token > legacy token
-OIDC_SCOPE="https://auth.x.ai::b1a00492-073a-47ea-816f-4c329264a828"
-LEGACY_SCOPE="https://accounts.x.ai/sign-in"
-AUTH_SOURCE=""
-
-if [ -n "$GROK_DEPLOYMENT_KEY" ]; then
-    AUTH_SOURCE="deployment key"
-    echo "Auth: using deployment key." >&2
-else
-    OIDC_TOKEN=$(read_grok_token "$OIDC_SCOPE" 2>/dev/null) || true
-    LEGACY_TOKEN=$(read_grok_token "$LEGACY_SCOPE" 2>/dev/null) || true
-    if [ -n "$OIDC_TOKEN" ]; then
-        AUTH_SOURCE="auth.json (oidc)"
-        echo "Auth: using OIDC token from ~/.kami/auth.json." >&2
-    elif [ -n "$LEGACY_TOKEN" ]; then
-        AUTH_SOURCE="auth.json (legacy)"
-        echo "Auth: using legacy token from ~/.kami/auth.json." >&2
-    fi
 fi
 
 case "$(uname -s)" in
     Darwin) os="macos" ;;
-    Linux)  os="linux" ;;
-    # Git for Windows / MSYS2 / Cygwin host — native Windows builds
+    Linux) os="linux" ;;
     MINGW* | MSYS* | CYGWIN*) os="windows" ;;
-    *)      echo "Unsupported OS: $(uname -s)" >&2; exit 1 ;;
+    *) echo "Error: unsupported operating system: $(uname -s)" >&2; exit 1 ;;
 esac
 
 case "$(uname -m)" in
-    x86_64|amd64|AMD64) arch="x86_64" ;;
-    arm64|aarch64|ARM64) arch="aarch64" ;;
-    *)                    echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+    x86_64 | amd64 | AMD64) arch="x86_64" ;;
+    arm64 | aarch64 | ARM64) arch="aarch64" ;;
+    *) echo "Error: unsupported architecture: $(uname -m)" >&2; exit 1 ;;
 esac
 
-BASE_URL_PRIMARY="https://x.ai/cli"
-BASE_URL_FALLBACK="https://storage.googleapis.com/grok-build-public-artifacts/cli"
-DOWNLOAD_DIR="$HOME/.kami/downloads"
-BIN_DIR="${GROK_BIN_DIR:-$HOME/.kami/bin}"
-mkdir -p "$DOWNLOAD_DIR" "$BIN_DIR"
+if [ "$os" = "windows" ] && [ "$arch" != "x86_64" ]; then
+    echo "Error: Windows ARM64 releases are not available yet." >&2
+    exit 1
+fi
+
+if [ -z "$VERSION" ]; then
+    echo "Fetching latest Kimi Build version..." >&2
+    VERSION="$(download_stdout "$RELEASES_URL/latest/download/version.txt" | tr -d '\r\n[:space:]')"
+fi
+
+if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9._]+)?$ ]]; then
+    echo "Error: invalid version '$VERSION' (expected X.Y.Z or X.Y.Z-suffix)." >&2
+    exit 1
+fi
 
 platform="${os}-${arch}"
-CHANNEL="${GROK_CHANNEL:-stable}"
+suffix=""
+[ "$os" = "windows" ] && suffix=".exe"
+asset="kami-${VERSION}-${platform}${suffix}"
+url="$RELEASES_URL/download/v${VERSION}/${asset}"
 
-# Pick a working BASE_URL: try Cloudflare-fronted x.ai first, fall back to
-# direct GCS if it's unreachable. The probe doubles as the channel-pointer
-# fetch when no explicit TARGET was passed, so the happy path costs zero
-# extra HTTP requests.
-if [ -z "$TARGET" ]; then echo "Fetching latest ${CHANNEL} version..." >&2; fi
-probe_result=$(download_file "${BASE_URL_PRIMARY}/${CHANNEL}" 2>/dev/null) || true
-if [ -n "$probe_result" ]; then
-    BASE_URL="$BASE_URL_PRIMARY"
-else
-    echo "Note: ${BASE_URL_PRIMARY} unreachable, falling back to direct GCS." >&2
-    BASE_URL="$BASE_URL_FALLBACK"
-    probe_result=$(download_file "${BASE_URL}/${CHANNEL}" 2>/dev/null) || true
-fi
+mkdir -p "$DOWNLOAD_DIR" "$BIN_DIR"
+binary="$DOWNLOAD_DIR/$asset"
+temporary="$binary.tmp.$$"
+trap 'rm -f "$temporary"' EXIT
 
-if [ -n "$TARGET" ]; then
-    version="$TARGET"
-else
-    version=$(printf '%s' "$probe_result" | tr -d '\r' | head -n1 | tr -d '[:space:]')
-    if [ -z "$version" ]; then
-        echo "Error: failed to fetch latest version from ${BASE_URL_PRIMARY}/${CHANNEL} and ${BASE_URL_FALLBACK}/${CHANNEL}" >&2
-        exit 1
-    fi
-fi
-
-if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9._]+)?$ ]]; then
-    echo "Invalid version format: $version (expected X.Y.Z or X.Y.Z-suffix)" >&2
+echo "Installing Kimi Build $VERSION ($platform)..." >&2
+download "$url" "$temporary"
+chmod +x "$temporary"
+if ! "$temporary" --version </dev/null >/dev/null 2>&1; then
+    echo "Error: downloaded binary failed its version check; the current install is unchanged." >&2
     exit 1
 fi
-
-if [ -n "$AUTH_SOURCE" ]; then
-    echo "Installing Grok $version ($platform, $AUTH_SOURCE)..." >&2
-else
-    echo "Installing Grok $version ($platform)..." >&2
-fi
-
-binary_path="$DOWNLOAD_DIR/grok-$platform"
-artifact_base="${BASE_URL}/grok-${version}-${platform}"
+mv -f "$temporary" "$binary"
+trap - EXIT
 
 if [ "$os" = "windows" ]; then
-    binary_path="${binary_path}.exe"
-fi
-
-binary_tmp="${binary_path}.tmp.$$"
-rm -f "$binary_tmp" 2>/dev/null || true
-
-echo "  Downloading grok ${version}..." >&2
-if [ "$os" = "windows" ]; then
-    if ! download_file_parallel "${artifact_base}.exe" "$binary_tmp"; then
-        if ! download_file_parallel "$artifact_base" "$binary_tmp"; then
-            rm -f "$binary_tmp"
-            if is_not_found "${artifact_base}.exe"; then
-                echo "Error: Grok is not yet available for your system ($platform)." >&2
-            else
-                echo "Error: binary download failed (${artifact_base}.exe and ${artifact_base})" >&2
-            fi
-            exit 1
-        fi
-    fi
-elif ! download_file_parallel "$artifact_base" "$binary_tmp"; then
-    rm -f "$binary_tmp"
-    if is_not_found "$artifact_base"; then
-        echo "Error: Grok is not yet available for your system ($platform)." >&2
-    else
-        echo "Error: binary download failed from ${artifact_base}" >&2
-    fi
-    exit 1
-fi
-
-if [ "$os" = "windows" ]; then
-    mv -f "$binary_tmp" "$binary_path"
-    # Symlinks require Developer Mode on Windows; copy instead.
-    # If the exe is locked by a running process, rename it aside then retry.
-    for bin_name in grok.exe agent.exe; do
-        rm -f "$BIN_DIR/$bin_name.old" 2>/dev/null || true  # stale backup from prior update
-        if ! cp -f "$binary_path" "$BIN_DIR/$bin_name" 2>/dev/null; then
-            mv -f "$BIN_DIR/$bin_name" "$BIN_DIR/$bin_name.old" 2>/dev/null || true
-            if ! cp -f "$binary_path" "$BIN_DIR/$bin_name" 2>/dev/null; then
-                # Rollback: restore the old binary so the install isn't broken.
-                mv -f "$BIN_DIR/$bin_name.old" "$BIN_DIR/$bin_name" 2>/dev/null || true
-                echo "Error: failed to install $bin_name" >&2
-                exit 1
-            fi
-        fi
+    for name in kami.exe grok.exe agent.exe; do
+        cp -f "$binary" "$BIN_DIR/$name"
     done
-    echo "  Binary installed to $BIN_DIR/grok.exe and $BIN_DIR/agent.exe." >&2
 else
-    chmod +x "$binary_tmp"
-    if ! "$binary_tmp" --version </dev/null >/dev/null 2>&1; then
-        echo "Error: downloaded grok failed to run; keeping the existing install." >&2
-        rm -f "$binary_tmp"
-        exit 1
-    fi
-    mv -f "$binary_tmp" "$binary_path"
-    # Use relative symlinks when BIN_DIR and DOWNLOAD_DIR share a parent
-    # (default layout: ~/.kami/bin and ~/.kami/downloads are siblings).
-    # Relative symlinks survive Docker bind-mounts with a different $HOME.
     if [ "$(dirname "$BIN_DIR")" = "$(dirname "$DOWNLOAD_DIR")" ]; then
-        link_target="../$(basename "$DOWNLOAD_DIR")/$(basename "$binary_path")"
+        link_target="../$(basename "$DOWNLOAD_DIR")/$asset"
     else
-        link_target="$binary_path"
+        link_target="$binary"
     fi
-    ln -sf "$link_target" "$BIN_DIR/grok"
-    ln -sf "$link_target" "$BIN_DIR/agent"
-    echo "  Binary linked to $BIN_DIR/grok and $BIN_DIR/agent." >&2
+    for name in kami grok agent; do
+        ln -sfn "$link_target" "$BIN_DIR/$name"
+    done
 fi
 
-# Generate shell completions (best-effort)
-mkdir -p "$HOME/.kami/completions/bash" "$HOME/.kami/completions/zsh"
-"$BIN_DIR/grok" completions bash > "$HOME/.kami/completions/bash/grok.bash" 2>/dev/null || true
-"$BIN_DIR/grok" completions zsh  > "$HOME/.kami/completions/zsh/_grok"     2>/dev/null || true
-# Fish: write to the auto-loaded completions dir so it works immediately
-if mkdir -p "$HOME/.config/fish/completions" 2>/dev/null; then
-    "$BIN_DIR/grok" completions fish > "$HOME/.config/fish/completions/grok.fish" 2>/dev/null || true
-fi
-
-# Persist installer source and channel to config
-CONFIG_FILE="$HOME/.kami/config.toml"
-CLI_BLOCK="installer = \"internal\""
-if [ "$CHANNEL" != "stable" ]; then
-    CLI_BLOCK="${CLI_BLOCK}\nchannel = \"${CHANNEL}\""
-fi
-if [ ! -f "$CONFIG_FILE" ]; then
-    printf '[cli]\n%b\n' "$CLI_BLOCK" > "$CONFIG_FILE"
-elif grep -q '^\[cli\]' "$CONFIG_FILE"; then
-    tmp="$CONFIG_FILE.tmp.$$"
-    awk -v block="$CLI_BLOCK" '
-        /^\[cli\][[:space:]]*(#.*)?$/ { print; printf "%s\n", block; in_cli=1; next }
-        /^\[.*\][[:space:]]*(#.*)?$/  { in_cli=0 }
-        in_cli && /^[[:space:]]*(installer|channel)[[:space:]]*=/ { next }
+# Record the updater backend without disturbing unrelated settings.
+config_file="$KAMI_HOME/config.toml"
+if [ ! -f "$config_file" ]; then
+    printf '[cli]\ninstaller = "gh-release"\n' > "$config_file"
+elif grep -q '^\[cli\][[:space:]]*$' "$config_file"; then
+    config_tmp="$config_file.tmp.$$"
+    awk '
+        /^\[cli\][[:space:]]*$/ { print; print "installer = \"gh-release\""; in_cli=1; next }
+        /^\[/ { in_cli=0 }
+        in_cli && /^[[:space:]]*installer[[:space:]]*=/ { next }
         { print }
-    ' "$CONFIG_FILE" > "$tmp" && mv "$tmp" "$CONFIG_FILE"
+    ' "$config_file" > "$config_tmp" && mv "$config_tmp" "$config_file"
 else
-    printf '\n[cli]\n%b\n' "$CLI_BLOCK" >> "$CONFIG_FILE"
+    printf '\n[cli]\ninstaller = "gh-release"\n' >> "$config_file"
 fi
 
-# Fetch managed_config.toml + requirements.toml from server (deployment key only).
-if [ -n "$GROK_DEPLOYMENT_KEY" ]; then
-    PROXY_URL="${GROK_PROXY_URL:-https://cli-chat-proxy.grok.com/v1}"
-    echo "  Fetching deployment config..." >&2
-    DEPLOY_RESPONSE=""
-    AUTH_HEADER_FILE=$(mktemp 2>/dev/null) || AUTH_HEADER_FILE=""
-    if [ -n "$AUTH_HEADER_FILE" ]; then
-        chmod 600 "$AUTH_HEADER_FILE" 2>/dev/null || true
-        printf 'Authorization: Bearer %s\n' "$GROK_DEPLOYMENT_KEY" > "$AUTH_HEADER_FILE"
-        DEPLOY_RESPONSE=$(curl -sS -f \
-            -H "@${AUTH_HEADER_FILE}" \
-            "${PROXY_URL}/deployment/config" 2>/dev/null) || DEPLOY_RESPONSE=""
-        : > "$AUTH_HEADER_FILE" 2>/dev/null || true
-        rm -f "$AUTH_HEADER_FILE"
-    fi
-    if [ -z "$DEPLOY_RESPONSE" ]; then
-        echo "  Warning: failed to fetch deployment config from ${PROXY_URL}/deployment/config" >&2
-    fi
-    if [ -n "$DEPLOY_RESPONSE" ]; then
-        MANAGED_CONFIG=$(json_get "$DEPLOY_RESPONSE" "managed_config")
-        REQUIREMENTS=$(json_get "$DEPLOY_RESPONSE" "requirements")
-        if [ -n "$MANAGED_CONFIG" ] && [ "$MANAGED_CONFIG" != "null" ]; then
-            printf '%s\n' "$MANAGED_CONFIG" > "$HOME/.kami/managed_config.toml"
-            echo "  Managed config applied." >&2
-        else
-            rm -f "$HOME/.kami/managed_config.toml"
-        fi
-        if [ -n "$REQUIREMENTS" ] && [ "$REQUIREMENTS" != "null" ]; then
-            printf '%s\n' "$REQUIREMENTS" > "$HOME/.kami/requirements.toml"
-            echo "  Requirements applied." >&2
-        else
-            rm -f "$HOME/.kami/requirements.toml"
-        fi
-    fi
+# Generate completions when the binary supports them.
+mkdir -p "$KAMI_HOME/completions/bash" "$KAMI_HOME/completions/zsh"
+"$BIN_DIR/kami" completions bash > "$KAMI_HOME/completions/bash/kami.bash" 2>/dev/null || true
+"$BIN_DIR/kami" completions zsh > "$KAMI_HOME/completions/zsh/_kami" 2>/dev/null || true
+if mkdir -p "$HOME/.config/fish/completions" 2>/dev/null; then
+    "$BIN_DIR/kami" completions fish > "$HOME/.config/fish/completions/kami.fish" 2>/dev/null || true
 fi
-
-if [ "$os" = "windows" ]; then
-    echo "Grok $version installed to $BIN_DIR/grok.exe" >&2
-else
-    echo "Grok $version installed to $BIN_DIR/grok" >&2
-fi
-
-# --- Ensure grok is on PATH ---
 
 path_has_dir() {
     case ":$PATH:" in *":$1:"*) return 0 ;; *) return 1 ;; esac
 }
 
-# Try to symlink into a directory already on PATH so grok works immediately
-# without restarting the shell. Candidate dirs in preference order.
-SYMLINK_CREATED=""
-if [ "$os" != "windows" ] && ! path_has_dir "$BIN_DIR"; then
-    for candidate in "$HOME/.local/bin" "/usr/local/bin"; do
-        if path_has_dir "$candidate" && [ -d "$candidate" ] && [ -w "$candidate" ]; then
-            ln -sf "$BIN_DIR/grok" "$candidate/grok"
-            ln -sf "$BIN_DIR/agent" "$candidate/agent"
-            SYMLINK_CREATED="$candidate"
-            echo "  Symlinked $candidate/grok -> $BIN_DIR/grok" >&2
-            echo "  Symlinked $candidate/agent -> $BIN_DIR/agent" >&2
-            break
-        fi
-    done
-fi
-
-# Also update shell config so ~/.kami/bin is on PATH for future sessions
-user_shell="$(basename "${SHELL:-}")"
-config_file=""
-
-case "$user_shell" in
-    bash) config_file="$HOME/.bashrc" ;;
-    zsh)  config_file="$HOME/.zshrc" ;;
-    fish) config_file="$HOME/.config/fish/config.fish" ;;
+shell_name="$(basename "${SHELL:-}")"
+shell_config=""
+case "$shell_name" in
+    bash) shell_config="$HOME/.bashrc" ;;
+    zsh) shell_config="$HOME/.zshrc" ;;
+    fish) shell_config="$HOME/.config/fish/config.fish" ;;
 esac
 
-if [ -n "$config_file" ]; then
-    mkdir -p "$(dirname "$config_file")"
-
-    # Resolve symlinks so tmp+mv rewrites the stow/dotfiles target, not the link.
-    if [ -e "$config_file" ] || [ -L "$config_file" ]; then
-        _cf="$config_file"
-        _depth=0
-        while [ -L "$_cf" ] && [ "$_depth" -lt 40 ]; do
-            _link="$(readlink "$_cf")" || break
-            case "$_link" in
-                /*) _cf="$_link" ;;
-                *)  _cf="$(cd "$(dirname "$_cf")" && pwd -P)/$_link" ;;
-            esac
-            _depth=$((_depth + 1))
-        done
-        # Still a symlink (cycle/cap): leave original path so we never rewrite the link.
-        if [ ! -L "$_cf" ]; then
-            config_file="$(cd "$(dirname "$_cf")" && pwd -P)/$(basename "$_cf")"
-        fi
-        unset _cf _link _depth
-    fi
-
-    # Build the new installer block
-    if [ "$user_shell" = "fish" ]; then
-        new_block='# >>> grok installer >>>
-fish_add_path $HOME/.kami/bin
-# <<< grok installer <<<'
-    elif [ "$user_shell" = "zsh" ]; then
-        new_block='# >>> grok installer >>>
-export PATH="$HOME/.kami/bin:$PATH"
-fpath=(~/.kami/completions/zsh $fpath)
-autoload -Uz compinit && compinit -C
-# <<< grok installer <<<'
+if [ -n "$shell_config" ] && ! path_has_dir "$BIN_DIR"; then
+    mkdir -p "$(dirname "$shell_config")"
+    path_value="$KAMI_HOME/bin"
+    if [ "$shell_name" = "fish" ]; then
+        path_line="fish_add_path $path_value"
     else
-        new_block='# >>> grok installer >>>
-export PATH="$HOME/.kami/bin:$PATH"
-[[ -r "$HOME/.kami/completions/bash/grok.bash" ]] && source "$HOME/.kami/completions/bash/grok.bash"
-# <<< grok installer <<<'
+        path_line="export PATH=\"$path_value:\$PATH\""
     fi
-
-    if grep -qs "grok installer" "$config_file" 2>/dev/null; then
-        # Replace existing block in-place (strip old >>> to <<< lines, insert new)
-        tmp="$config_file.tmp.$$"
-        awk '
-            /# >>> grok installer >>>/ { skip=1; next }
-            /# <<< grok installer <<</ { skip=0; next }
-            !skip { print }
-        ' "$config_file" > "$tmp" && mv "$tmp" "$config_file"
-    else
-        [ -f "$config_file" ] && cp "$config_file" "$config_file.bak.$(date +%s)"
-
-        # macOS bash: ensure bash_profile sources bashrc
-        if [ "$user_shell" = "bash" ] && [ "$(uname -s)" = "Darwin" ]; then
-            if [ -f "$HOME/.bash_profile" ] && ! grep -qs "source ~/.bashrc" "$HOME/.bash_profile"; then
-                printf '\n[[ -r ~/.bashrc ]] && source ~/.bashrc\n' >> "$HOME/.bash_profile"
-            fi
-        fi
+    if ! grep -Fq "$path_line" "$shell_config" 2>/dev/null; then
+        printf '\n# Kimi Build\n%s\n' "$path_line" >> "$shell_config"
     fi
-
-    printf '\n%s\n' "$new_block" >> "$config_file"
-    echo "  Updated $BIN_DIR in PATH in $config_file." >&2
 fi
 
-echo "" >&2
-if path_has_dir "$BIN_DIR" || [ -n "$SYMLINK_CREATED" ]; then
-    echo "Run 'grok' or 'agent' to get started!" >&2
-elif [ -n "$config_file" ]; then
-    echo "Restart your terminal, then run 'grok' or 'agent' to get started!" >&2
+echo "Kimi Build $VERSION installed to $BIN_DIR/kami${suffix}." >&2
+if path_has_dir "$BIN_DIR"; then
+    echo "Run 'kami' to get started." >&2
+elif [ -n "$shell_config" ]; then
+    echo "Restart your terminal, then run 'kami'." >&2
 else
-    echo "Add $BIN_DIR to your PATH, then run 'grok' or 'agent' to get started:" >&2
-    echo '  export PATH="$HOME/.kami/bin:$PATH"' >&2
-fi
-
-if [ "$os" = "windows" ]; then
-    echo "To use grok from cmd.exe or PowerShell, add %USERPROFILE%\\.grok\\bin to your PATH." >&2
+    echo "Add $BIN_DIR to PATH, then run 'kami'." >&2
 fi

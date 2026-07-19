@@ -43,13 +43,27 @@ for the version of the code present in this tree.
 Prebuilt binaries are published for macOS, Linux, and Windows:
 
 ```sh
-curl -fsSL https://x.ai/cli/install.sh | bash   # macOS / Linux / Git Bash
-irm https://x.ai/cli/install.ps1 | iex          # Windows PowerShell
+curl -fsSL https://raw.githubusercontent.com/Ayor1337/kimi-build/main/crates/codegen/xai-grok-pager/scripts/install.sh | bash   # macOS / Linux / Git Bash
+irm https://raw.githubusercontent.com/Ayor1337/kimi-build/main/crates/codegen/xai-grok-pager/scripts/install.ps1 | iex          # Windows PowerShell
 kami --version
 ```
 
-See the [changelog](https://x.ai/build/changelog) for the latest fixes,
-features, and improvements in each release.
+Installers download the matching binary from this repository's
+[GitHub Releases](https://github.com/Ayor1337/kimi-build/releases). To install
+a specific version, pass it to the Bash installer or set `KAMI_VERSION` in
+PowerShell:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Ayor1337/kimi-build/main/crates/codegen/xai-grok-pager/scripts/install.sh | bash -s 0.2.105
+```
+
+```powershell
+$env:KAMI_VERSION="0.2.105"; irm https://raw.githubusercontent.com/Ayor1337/kimi-build/main/crates/codegen/xai-grok-pager/scripts/install.ps1 | iex
+```
+
+Maintainers publish a release by pushing a `v<semver>` tag. The GitHub Actions
+workflow builds the supported targets, uploads `kami-<version>-<platform>`
+assets, and publishes `version.txt` for the installers.
 
 ## Building from source
 
