@@ -1,3 +1,6 @@
 /target
 **/*.rs.bk
 .DS_Store
+# Local Windows protoc fallback (dotslash bin/protoc has no windows platform entry)
+/bin/protoc.exe
+/include/

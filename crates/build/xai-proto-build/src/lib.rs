@@ -106,11 +106,7 @@ impl XaiProtoBuilder {
         let includes = Vec::from_iter(includes);
 
         // `/dev/stdout` and `/dev/null` don't exist on Windows, so write the
-        // dependency file and descriptor set to a temp dir and read them back.
-        let tempdir = tempfile::tempdir()?;
-        let dep_path = tempdir.path().join("deps.d");
-        let desc_path = tempdir.path().join("desc.pb");
-
+        // dependency file and descriptor set to temp files and read them back.
         if let Some(protoc) = protoc {
             println!(
                 "cargo:rerun-if-changed={}",
@@ -120,15 +116,17 @@ impl XaiProtoBuilder {
 
         // Can only process one input file when using --dependency_out=FILE.
         for proto in protos {
+            let dependency_file = tempfile::NamedTempFile::new()?;
+            let descriptor_file = tempfile::NamedTempFile::new()?;
             let mut command = Command::new(protoc.unwrap_or(Path::new("protoc")));
             command
                 .arg(format!(
                     "--dependency_out={}",
-                    dep_path.to_str().context("dep path not UTF-8")?
+                    dependency_file.path().display()
                 ))
                 .arg(format!(
                     "--descriptor_set_out={}",
-                    desc_path.to_str().context("desc path not UTF-8")?
+                    descriptor_file.path().display()
                 ));
 
             // Add protoc's well-known types include directory first (if found).
@@ -155,20 +153,9 @@ impl XaiProtoBuilder {
                 return Err(anyhow::anyhow!("protoc command failed"));
             }
 
-            let output = fs::read_to_string(&dep_path)
-                .with_context(|| format!("failed to read {}", dep_path.display()))?;
-
-            let mut lines = output.lines();
-            let first_line = lines.next().context("protoc command output is empty")?;
-            // The first line is `<descriptor_set_out path>: <deps...>`. Split on
-            // the first ": " so Windows drive letters ("C:\...") survive.
-            let rem = first_line
-                .split_once(": ")
-                .map(|(_, rem)| rem)
-                .with_context(|| {
-                    format!("protoc command output must start with a target: {output:?}")
-                })?;
-            for line in iter::once(rem).chain(lines) {
+            let dependency_output = fs::read_to_string(dependency_file.path())
+                .context("failed to read protoc dependency output")?;
+            for line in Self::parse_dependency_output(&dependency_output)? {
                 let line = line.trim();
                 let line = line.strip_suffix("\\").unwrap_or(line);
                 // Depending on absolute paths like
@@ -188,6 +175,16 @@ impl XaiProtoBuilder {
         }
 
         Ok(())
+    }
+
+    fn parse_dependency_output(output: &str) -> anyhow::Result<Vec<&str>> {
+        let mut lines = output.lines();
+        let first_line = lines.next().context("protoc dependency output is empty")?;
+        let separator = first_line.find(": ").with_context(|| {
+            format!("protoc dependency output has no target separator: {output:?}")
+        })?;
+        let dependencies = &first_line[separator + 2..];
+        Ok(iter::once(dependencies).chain(lines).collect())
     }
 
     pub fn compile_protos(
@@ -288,6 +285,24 @@ impl XaiProtoBuilder {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::XaiProtoBuilder;
+
+    #[test]
+    fn parses_dependency_output_with_windows_drive_target() {
+        let output =
+            "C:\\tmp\\descriptor.pb: E:/repo/proto/api.proto\\\nE:/repo/proto/include.proto\n";
+
+        let dependencies = XaiProtoBuilder::parse_dependency_output(output).unwrap();
+
+        assert_eq!(
+            dependencies,
+            vec!["E:/repo/proto/api.proto\\", "E:/repo/proto/include.proto"]
+        );
     }
 }
 
